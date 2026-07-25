@@ -131,7 +131,30 @@
     transition: all 0.15s ease;
   }
   .ranges button.active { background: rgba(255,255,255,0.18); color: var(--text); border-color: rgba(255,255,255,0.28); }
-  canvas#detailChart { width: 100%; height: 190px; display: block; }
+  .chart-wrap { position: relative; }
+  canvas#detailChart { width: 100%; height: 190px; display: block; touch-action: none; cursor: crosshair; }
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(10, 13, 32, 0.94);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 10px;
+    padding: 6px 10px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    transform: translate(-50%, -118%);
+    z-index: 2;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip .tv { font-weight: 700; font-size: 0.95rem; line-height: 1.1; }
+  .tooltip .tt { color: var(--text-dim); font-size: 0.68rem; margin-top: 2px; }
+  .chart-hint {
+    text-align: center; color: var(--text-dim); font-size: 0.68rem;
+    margin-top: 6px; transition: opacity 0.3s ease;
+  }
+  .chart-hint.hidden { opacity: 0; }
   .stats { display: flex; gap: 10px; margin-top: 16px; }
   .stat {
     flex: 1; text-align: center;
@@ -206,7 +229,11 @@
     <button class="close-btn" id="closeBtn" aria-label="Fermer">✕</button>
   </div>
   <div class="ranges" id="ranges"></div>
-  <canvas id="detailChart"></canvas>
+  <div class="chart-wrap">
+    <canvas id="detailChart"></canvas>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+  <div class="chart-hint" id="chartHint">Touche le graphique pour explorer</div>
   <div class="stats">
     <div class="stat"><div class="k">Min</div><div class="v" id="statMin">--</div></div>
     <div class="stat"><div class="k">Moyenne</div><div class="v" id="statAvg">--</div></div>
@@ -293,7 +320,10 @@ function drawSparkline(canvas, points, color) {
   ctx.fill();
 }
 
-function drawDetailChart(canvas, points, meta, hours) {
+function drawDetailChart() {
+  if (!chartState) return;
+  const { points, meta, hours } = chartState;
+  const canvas = document.getElementById("detailChart");
   const { ctx, w, h } = prepCanvas(canvas);
   if (points.length < 2) return;
 
@@ -307,6 +337,8 @@ function drawDetailChart(canvas, points, meta, hours) {
 
   const xAt = (i) => padL + (i / (points.length - 1)) * plotW;
   const yAt = (v) => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
+
+  chartState.geom = { padL, padT, plotW, plotH, lo, hi };
 
   // grille + labels Y
   ctx.font = "10px -apple-system, sans-serif";
@@ -364,12 +396,41 @@ function drawDetailChart(canvas, points, meta, hours) {
   ctx.arc(lastX, lastY, 7, 0, Math.PI * 2);
   ctx.fillStyle = meta.color + "40";
   ctx.fill();
+
+  // curseur d'exploration
+  if (hoverIndex !== null && hoverIndex >= 0 && hoverIndex < points.length) {
+    const hx = xAt(hoverIndex), hy = yAt(points[hoverIndex].v);
+    ctx.save();
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = "rgba(255,255,255,0.45)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(hx, padT);
+    ctx.lineTo(hx, padT + plotH);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(hx, hy, 9, 0, Math.PI * 2);
+    ctx.fillStyle = meta.color + "38";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(hx, hy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = meta.color;
+    ctx.fill();
+  }
 }
 
 /* ---------- Bottom sheet ---------- */
 
 let currentMetric = null;
 let currentRange = 0; // 6 h par défaut
+let chartState = null;
+let hoverIndex = null;
 
 function buildRangeButtons() {
   const box = document.getElementById("ranges");
@@ -394,16 +455,22 @@ async function loadSheetData() {
   const msg = document.getElementById("sheetMsg");
 
   msg.style.display = "none";
+  hoverIndex = null;
+  hideTooltip();
   try {
     const points = await fetchChart(currentMetric, range.hours, range.resolution);
     if (points.length < 2) {
+      chartState = null;
       prepCanvas(canvas);
+      document.getElementById("chartHint").style.display = "none";
       msg.textContent = "Pas encore assez de données sur cette période.";
       msg.style.display = "block";
       ["statMin", "statAvg", "statMax"].forEach((id) => (document.getElementById(id).textContent = "--"));
       return;
     }
-    drawDetailChart(canvas, points, meta, range.hours);
+    document.getElementById("chartHint").style.display = "";
+    chartState = { points, meta, hours: range.hours };
+    drawDetailChart();
 
     const vals = points.map((p) => p.v);
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -413,11 +480,81 @@ async function loadSheetData() {
     document.getElementById("statMax").textContent = f(Math.max(...vals));
   } catch (err) {
     console.error(err);
+    chartState = null;
     prepCanvas(canvas);
+    document.getElementById("chartHint").style.display = "none";
     msg.textContent = "Impossible de charger l'historique.";
     msg.style.display = "block";
   }
 }
+
+/* ---------- Exploration du graphique ---------- */
+
+function hideTooltip() {
+  document.getElementById("tooltip").classList.remove("show");
+}
+
+function fmtPointTime(d, hours) {
+  const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  if (hours <= 24) return time;
+  return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) + " · " + time;
+}
+
+function scrub(clientX) {
+  if (!chartState || !chartState.geom) return;
+  const canvas = document.getElementById("detailChart");
+  const rect = canvas.getBoundingClientRect();
+  const { padL, padT, plotW, plotH, lo, hi } = chartState.geom;
+  const { points, meta, hours } = chartState;
+
+  const x = clientX - rect.left;
+  let i = Math.round(((x - padL) / plotW) * (points.length - 1));
+  i = Math.max(0, Math.min(points.length - 1, i));
+  if (i === hoverIndex) return;
+  hoverIndex = i;
+  drawDetailChart();
+
+  const p = points[i];
+  const px = padL + (i / (points.length - 1)) * plotW;
+  const py = padT + plotH - ((p.v - lo) / (hi - lo)) * plotH;
+
+  const tip = document.getElementById("tooltip");
+  tip.innerHTML =
+    `<div class="tv" style="color:${meta.color}">${p.v.toFixed(meta.decimals)} ${meta.unit}</div>` +
+    `<div class="tt">${fmtPointTime(p.t, hours)}</div>`;
+  tip.classList.add("show");
+  // garde l'infobulle dans les limites du graphique
+  const half = tip.offsetWidth / 2;
+  tip.style.left = Math.max(half + 2, Math.min(rect.width - half - 2, px)) + "px";
+  tip.style.top = Math.max(tip.offsetHeight + 4, py) + "px";
+
+  document.getElementById("chartHint").classList.add("hidden");
+}
+
+(function setupScrub() {
+  const canvas = document.getElementById("detailChart");
+  let active = false;
+  canvas.addEventListener("pointerdown", (e) => {
+    active = true;
+    canvas.setPointerCapture(e.pointerId);
+    scrub(e.clientX);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (active || e.pointerType === "mouse") scrub(e.clientX);
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    active = false;
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  });
+  canvas.addEventListener("pointercancel", () => { active = false; });
+  canvas.addEventListener("pointerleave", (e) => {
+    if (e.pointerType === "mouse" && !active) {
+      hoverIndex = null;
+      hideTooltip();
+      drawDetailChart();
+    }
+  });
+})();
 
 function openSheet(metric) {
   currentMetric = metric;
@@ -440,6 +577,9 @@ function closeSheet() {
   document.getElementById("sheet").classList.remove("open");
   document.body.classList.remove("sheet-open");
   currentMetric = null;
+  hoverIndex = null;
+  chartState = null;
+  hideTooltip();
 }
 
 document.querySelectorAll(".card").forEach((card) => {
