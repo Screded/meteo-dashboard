@@ -53,6 +53,10 @@
   .forecast .fc-icon { font-size: 2rem; line-height: 1; flex-shrink: 0; }
   .forecast .fc-title { font-size: 1rem; font-weight: 600; }
   .forecast .fc-sub { font-size: 0.74rem; color: var(--text-dim); margin-top: 3px; line-height: 1.35; }
+  .forecast .fc-meta {
+    font-size: 0.67rem; color: rgba(167,172,201,0.7);
+    margin-top: 3px; font-variant-numeric: tabular-nums;
+  }
   .cards { display: flex; flex-direction: column; gap: 14px; flex: 1; }
   .card {
     background: var(--card-bg);
@@ -189,6 +193,7 @@
   <div>
     <div class="fc-title" id="fcTitle">Analyse en cours…</div>
     <div class="fc-sub" id="fcSub">Quelques heures de mesures sont nécessaires</div>
+    <div class="fc-meta" id="fcMeta"></div>
   </div>
 </div>
 
@@ -264,6 +269,7 @@
 <script>
 const USERNAME = "latruite73";
 const REFRESH_MS = 60000;
+const ALTITUDE_M = 330; // altitude du capteur, sert a ramener la pression au niveau de la mer
 const RING_CIRCUMFERENCE = 2 * Math.PI * 36;
 const TEMP_MIN = 0, TEMP_MAX = 40;
 
@@ -646,45 +652,75 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet
 
 /* ---------- Prévision selon la tendance barométrique ---------- */
 
-// Seuils meteo classiques, exprimes en hPa par 3 h.
-function forecastFromTrend(d) {
-  if (d <= -6)   return { icon: "⛈️", title: "Dégradation rapide", sub: "Vent et pluie probables" };
-  if (d <= -3.5) return { icon: "🌧️", title: "Dégradation marquée", sub: "Pluie probable" };
-  if (d <= -1.6) return { icon: "🌦️", title: "Dégradation", sub: "Le temps se couvre" };
-  if (d <= -0.6) return { icon: "🌥️", title: "Légère dégradation", sub: "Nuages en approche" };
-  if (d <   0.6) return { icon: "🌤️", title: "Temps stable",       sub: "Pas de changement notable" };
-  if (d <   1.6) return { icon: "🌤️", title: "Légère amélioration", sub: "Éclaircies possibles" };
-  if (d <   3.5) return { icon: "☀️", title: "Amélioration",        sub: "Le temps se dégage" };
-  if (d <     6) return { icon: "☀️", title: "Amélioration marquée", sub: "Beau temps qui s'installe" };
-  return { icon: "☀️", title: "Amélioration rapide", sub: "Ciel dégagé, parfois venteux" };
+// Ramene la pression mesuree au niveau de la mer (formule barometrique).
+function pressionNiveauMer(pAbs, tempC) {
+  const h = ALTITUDE_M;
+  return pAbs * Math.pow(1 - (0.0065 * h) / (tempC + 0.0065 * h + 273.15), -5.257);
 }
 
-function setForecast(icon, title, sub) {
+function niveauPression(qnh) {
+  if (qnh >= 1020) return "haute";
+  if (qnh >= 1005) return "normale";
+  return "basse";
+}
+
+// Seuils meteo classiques, exprimes en hPa par 3 h.
+function tendancePression(d3h) {
+  if (d3h > 1.6) return "hausse";
+  if (d3h < -1.6) return "baisse";
+  return "stable";
+}
+
+// Croisement niveau x tendance, dans l'esprit des regles de Zambretti.
+const PREVISIONS = {
+  "haute|hausse":   { icon: "☀️", title: "Beau temps durable",  sub: "Anticyclone qui se renforce" },
+  "haute|stable":   { icon: "☀️", title: "Beau temps stable",   sub: "Anticyclone bien établi" },
+  "haute|baisse":   { icon: "🌤️", title: "Beau mais évolutif",  sub: "L'anticyclone commence à faiblir" },
+  "normale|hausse": { icon: "🌤️", title: "Amélioration",        sub: "Le temps se dégage" },
+  "normale|stable": { icon: "⛅", title: "Temps variable",      sub: "Pas de changement notable" },
+  "normale|baisse": { icon: "🌦️", title: "Dégradation",         sub: "Le temps se couvre" },
+  "basse|hausse":   { icon: "🌥️", title: "Amélioration lente",  sub: "Sortie de perturbation" },
+  "basse|stable":   { icon: "🌧️", title: "Temps perturbé",      sub: "Ciel chargé, pluie possible" },
+  "basse|baisse":   { icon: "⛈️", title: "Nettement perturbé",  sub: "Pluie et vent probables" },
+};
+
+function setForecast(icon, title, sub, meta = "") {
   document.getElementById("fcIcon").textContent = icon;
   document.getElementById("fcTitle").textContent = title;
   document.getElementById("fcSub").textContent = sub;
+  document.getElementById("fcMeta").textContent = meta;
 }
 
 async function updateForecast() {
   try {
-    const pts = await fetchChart("pression", 3, 5);
+    const [pts, tempPt] = await Promise.all([
+      fetchChart("pression", 3, 5),
+      fetchLast("temperature"),
+    ]);
+
     if (pts.length < 2) {
       setForecast("⏳", "Analyse en cours…", "En attente des premières mesures");
       return;
     }
 
     const spanH = (pts[pts.length - 1].t - pts[0].t) / 3600000;
+    const qnh = pressionNiveauMer(pts[pts.length - 1].v, parseFloat(tempPt.value));
+
     if (spanH < 2) {
       const reste = Math.max(1, Math.ceil(2 - spanH));
-      setForecast("⏳", "Analyse en cours…", `Encore ~${reste} h de mesures nécessaires`);
+      setForecast("⏳", "Analyse en cours…", `Encore ~${reste} h de mesures nécessaires`,
+        `${qnh.toFixed(0)} hPa au niveau de la mer`);
       return;
     }
 
     const delta = pts[pts.length - 1].v - pts[0].v;
     const delta3h = delta * (3 / spanH); // ramene a la reference 3 h
-    const f = forecastFromTrend(delta3h);
+    const f = PREVISIONS[`${niveauPression(qnh)}|${tendancePression(delta3h)}`];
+    const rapide = Math.abs(delta3h) >= 3.5 ? " Évolution rapide." : "";
     const signe = delta > 0 ? "+" : "";
-    setForecast(f.icon, f.title, `${f.sub} · ${signe}${delta.toFixed(1)} hPa en ${spanH.toFixed(1)} h`);
+
+    setForecast(f.icon, f.title, f.sub + rapide,
+      `${qnh.toFixed(0)} hPa niv. mer · ${signe}${delta.toFixed(1)} hPa en ${spanH.toFixed(1)} h`);
   } catch (err) {
     console.error(err);
     setForecast("⏳", "Prévision indisponible", "Impossible de lire la tendance");
