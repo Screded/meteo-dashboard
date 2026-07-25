@@ -20,8 +20,6 @@
     --card-border: rgba(255,255,255,0.12);
     --text: #f2f3fb;
     --text-dim: #a7acc9;
-    --accent-hot: #eb5757;
-    --accent-cold: #56ccf2;
     --accent-humidity: #56ccf2;
     --accent-pressure: #9b8cff;
   }
@@ -40,6 +38,7 @@
     flex-direction: column;
     gap: 16px;
   }
+  body.sheet-open { overflow: hidden; }
   header { text-align: center; margin-bottom: 4px; }
   header h1 { font-size: 1.3rem; margin: 0 0 4px; font-weight: 600; letter-spacing: 0.02em; }
   header p { margin: 0; color: var(--text-dim); font-size: 0.8rem; }
@@ -54,6 +53,19 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+    position: relative;
+  }
+  .card:active { transform: scale(0.98); background: rgba(255,255,255,0.11); }
+  .card::after {
+    content: "›";
+    position: absolute;
+    top: 14px; right: 16px;
+    color: var(--text-dim);
+    font-size: 1.3rem;
+    line-height: 1;
+    opacity: 0.5;
   }
   .card .label { font-size: 0.82rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
   .card .value { font-size: 2.4rem; font-weight: 700; line-height: 1; margin-top: 6px; }
@@ -64,12 +76,71 @@
   .ring .bg { stroke: rgba(255,255,255,0.1); }
   .ring .fg { stroke-linecap: round; transition: stroke-dasharray 0.6s ease; }
   .pressure-row { flex-direction: column; align-items: stretch; }
-  .pressure-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .pressure-top { display: flex; justify-content: space-between; align-items: baseline; padding-right: 22px; }
   canvas#chart { width: 100%; height: 70px; margin-top: 8px; }
   footer { text-align: center; color: var(--text-dim); font-size: 0.72rem; padding-top: 4px; }
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #6fcf97; margin-right: 5px; }
   .dot.offline { background: #eb5757; }
   .refresh-hint { text-align: center; color: var(--text-dim); font-size: 0.7rem; }
+
+  /* ---- Bottom sheet historique ---- */
+  .backdrop {
+    position: fixed; inset: 0;
+    background: rgba(8, 10, 24, 0.6);
+    backdrop-filter: blur(3px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease;
+    z-index: 10;
+  }
+  .backdrop.open { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(180deg, #262e54 0%, #1c2244 100%);
+    border-radius: 24px 24px 0 0;
+    border-top: 1px solid rgba(255,255,255,0.14);
+    padding: 10px 20px max(24px, env(safe-area-inset-bottom));
+    transform: translateY(100%);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    z-index: 11;
+    max-height: 88dvh;
+    overflow-y: auto;
+  }
+  .sheet.open { transform: translateY(0); }
+  .grabber {
+    width: 40px; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.25);
+    margin: 4px auto 14px;
+  }
+  .sheet-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
+  .sheet-head .label { font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  .sheet-head .value { font-size: 2.1rem; font-weight: 700; line-height: 1.1; margin-top: 4px; }
+  .sheet-head .unit { font-size: 1rem; font-weight: 400; color: var(--text-dim); margin-left: 3px; }
+  .close-btn {
+    background: rgba(255,255,255,0.1); border: none; color: var(--text);
+    width: 32px; height: 32px; border-radius: 50%;
+    font-size: 1.1rem; line-height: 1; cursor: pointer;
+  }
+  .ranges { display: flex; gap: 8px; margin-bottom: 14px; }
+  .ranges button {
+    flex: 1;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-dim);
+    padding: 8px 0; border-radius: 12px;
+    font-size: 0.82rem; font-family: inherit; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .ranges button.active { background: rgba(255,255,255,0.18); color: var(--text); border-color: rgba(255,255,255,0.28); }
+  canvas#detailChart { width: 100%; height: 190px; display: block; }
+  .stats { display: flex; gap: 10px; margin-top: 16px; }
+  .stat {
+    flex: 1; text-align: center;
+    background: rgba(255,255,255,0.06);
+    border-radius: 14px; padding: 10px 4px;
+  }
+  .stat .k { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat .v { font-size: 1.05rem; font-weight: 600; margin-top: 3px; }
+  .sheet-msg { text-align: center; color: var(--text-dim); font-size: 0.85rem; padding: 30px 0; }
 </style>
 </head>
 <body>
@@ -81,7 +152,7 @@
 
 <div class="cards">
 
-  <div class="card">
+  <div class="card" data-metric="temperature">
     <div>
       <div class="label">Température</div>
       <div class="value" id="tempValue">--<span class="unit">°C</span></div>
@@ -89,12 +160,12 @@
     <div class="ring">
       <svg viewBox="0 0 84 84">
         <circle class="bg" cx="42" cy="42" r="36"></circle>
-        <circle class="fg" id="tempRing" cx="42" cy="42" r="36" stroke="var(--accent-hot)"></circle>
+        <circle class="fg" id="tempRing" cx="42" cy="42" r="36" stroke="#eb5757"></circle>
       </svg>
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" data-metric="humidite">
     <div>
       <div class="label">Humidité</div>
       <div class="value" id="humValue">--<span class="unit">%</span></div>
@@ -107,7 +178,7 @@
     </div>
   </div>
 
-  <div class="card pressure-row">
+  <div class="card pressure-row" data-metric="pression">
     <div class="pressure-top">
       <div>
         <div class="label">Pression</div>
@@ -124,21 +195,45 @@
 
 <footer>Données via Adafruit IO &middot; ESP32-C3</footer>
 
+<div class="backdrop" id="backdrop"></div>
+<div class="sheet" id="sheet">
+  <div class="grabber"></div>
+  <div class="sheet-head">
+    <div>
+      <div class="label" id="sheetLabel">--</div>
+      <div class="value" id="sheetValue">--</div>
+    </div>
+    <button class="close-btn" id="closeBtn" aria-label="Fermer">✕</button>
+  </div>
+  <div class="ranges" id="ranges"></div>
+  <canvas id="detailChart"></canvas>
+  <div class="stats">
+    <div class="stat"><div class="k">Min</div><div class="v" id="statMin">--</div></div>
+    <div class="stat"><div class="k">Moyenne</div><div class="v" id="statAvg">--</div></div>
+    <div class="stat"><div class="k">Max</div><div class="v" id="statMax">--</div></div>
+  </div>
+  <div class="sheet-msg" id="sheetMsg" style="display:none"></div>
+</div>
+
 <script>
 const USERNAME = "latruite73";
-const FEED_TEMP = "temperature";
-const FEED_HUM = "humidite";
-const FEED_PRES = "pression";
 const REFRESH_MS = 60000;
-
-const TEMP_MIN = 0, TEMP_MAX = 40;
 const RING_CIRCUMFERENCE = 2 * Math.PI * 36;
+const TEMP_MIN = 0, TEMP_MAX = 40;
 
-function setRing(el, pct, color) {
-  const clamped = Math.max(0, Math.min(1, pct));
-  el.setAttribute("stroke-dasharray", `${RING_CIRCUMFERENCE * clamped} ${RING_CIRCUMFERENCE}`);
-  if (color) el.setAttribute("stroke", color);
-}
+const METRICS = {
+  temperature: { label: "Température", unit: "°C", color: "#eb5757", decimals: 1 },
+  humidite:    { label: "Humidité",    unit: "%",  color: "#56ccf2", decimals: 0 },
+  pression:    { label: "Pression",    unit: "hPa", color: "#9b8cff", decimals: 1 },
+};
+
+const RANGES = [
+  { label: "6 h",  hours: 6,   resolution: 5 },
+  { label: "24 h", hours: 24,  resolution: 30 },
+  { label: "7 j",  hours: 168, resolution: 120 },
+];
+
+/* ---------- API ---------- */
 
 async function fetchLast(feed) {
   const res = await fetch(`https://io.adafruit.com/api/v2/${USERNAME}/feeds/${feed}/data?limit=1`);
@@ -147,58 +242,222 @@ async function fetchLast(feed) {
   return data[0];
 }
 
-async function fetchHistory(feed, limit = 20) {
-  const res = await fetch(`https://io.adafruit.com/api/v2/${USERNAME}/feeds/${feed}/data?limit=${limit}`);
+async function fetchChart(feed, hours, resolution) {
+  const res = await fetch(
+    `https://io.adafruit.com/api/v2/${USERNAME}/feeds/${feed}/data/chart?hours=${hours}&resolution=${resolution}`
+  );
   if (!res.ok) throw new Error(`${feed}: ${res.status}`);
-  const data = await res.json();
-  return data.reverse();
+  const json = await res.json();
+  return (json.data || [])
+    .map(([date, value]) => ({ t: new Date(date), v: parseFloat(value) }))
+    .filter((p) => !isNaN(p.v));
 }
 
-function drawChart(points) {
-  const canvas = document.getElementById("chart");
+/* ---------- Rendu graphique ---------- */
+
+function prepCanvas(canvas) {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
+  return { ctx, w: rect.width, h: rect.height };
+}
 
-  const values = points.map((p) => parseFloat(p.value));
+function drawSparkline(canvas, points, color) {
+  const { ctx, w, h } = prepCanvas(canvas);
+  const values = points.map((p) => p.v);
   if (values.length < 2) return;
   const min = Math.min(...values), max = Math.max(...values);
   const pad = (max - min) * 0.15 || 1;
   const lo = min - pad, hi = max + pad;
 
-  const w = rect.width, h = rect.height;
   ctx.beginPath();
   values.forEach((v, i) => {
     const x = (i / (values.length - 1)) * w;
     const y = h - ((v - lo) / (hi - lo)) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.strokeStyle = "#9b8cff";
+  ctx.strokeStyle = color;
   ctx.lineWidth = 2.5;
   ctx.lineJoin = "round";
   ctx.stroke();
 
-  ctx.lineTo(w, h);
-  ctx.lineTo(0, h);
-  ctx.closePath();
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "rgba(155,140,255,0.35)");
-  grad.addColorStop(1, "rgba(155,140,255,0)");
+  grad.addColorStop(0, color + "59");
+  grad.addColorStop(1, color + "00");
   ctx.fillStyle = grad;
   ctx.fill();
 }
 
+function drawDetailChart(canvas, points, meta, hours) {
+  const { ctx, w, h } = prepCanvas(canvas);
+  if (points.length < 2) return;
+
+  const padL = 42, padR = 8, padT = 10, padB = 22;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+
+  const values = points.map((p) => p.v);
+  const min = Math.min(...values), max = Math.max(...values);
+  const pad = (max - min) * 0.15 || 1;
+  const lo = min - pad, hi = max + pad;
+
+  const xAt = (i) => padL + (i / (points.length - 1)) * plotW;
+  const yAt = (v) => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
+
+  // grille + labels Y
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.fillStyle = "#a7acc9";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= 3; i++) {
+    const v = lo + ((hi - lo) * i) / 3;
+    const y = yAt(v);
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, y); ctx.lineTo(w - padR, y);
+    ctx.stroke();
+    ctx.fillText(v.toFixed(meta.decimals), padL - 6, y);
+  }
+
+  // labels X
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const fmt = hours > 48
+    ? (d) => d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
+    : (d) => d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  [0, Math.floor((points.length - 1) / 2), points.length - 1].forEach((i) => {
+    ctx.fillText(fmt(points[i].t), xAt(i), padT + plotH + 6);
+  });
+
+  // aire
+  ctx.beginPath();
+  points.forEach((p, i) => (i === 0 ? ctx.moveTo(xAt(i), yAt(p.v)) : ctx.lineTo(xAt(i), yAt(p.v))));
+  ctx.lineTo(xAt(points.length - 1), padT + plotH);
+  ctx.lineTo(xAt(0), padT + plotH);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+  grad.addColorStop(0, meta.color + "4d");
+  grad.addColorStop(1, meta.color + "00");
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // ligne
+  ctx.beginPath();
+  points.forEach((p, i) => (i === 0 ? ctx.moveTo(xAt(i), yAt(p.v)) : ctx.lineTo(xAt(i), yAt(p.v))));
+  ctx.strokeStyle = meta.color;
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  // point final
+  const lastX = xAt(points.length - 1), lastY = yAt(points[points.length - 1].v);
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = meta.color;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 7, 0, Math.PI * 2);
+  ctx.fillStyle = meta.color + "40";
+  ctx.fill();
+}
+
+/* ---------- Bottom sheet ---------- */
+
+let currentMetric = null;
+let currentRange = 0; // 6 h par défaut
+
+function buildRangeButtons() {
+  const box = document.getElementById("ranges");
+  box.innerHTML = "";
+  RANGES.forEach((r, i) => {
+    const btn = document.createElement("button");
+    btn.textContent = r.label;
+    btn.className = i === currentRange ? "active" : "";
+    btn.addEventListener("click", () => {
+      currentRange = i;
+      [...box.children].forEach((c, ci) => c.classList.toggle("active", ci === i));
+      loadSheetData();
+    });
+    box.appendChild(btn);
+  });
+}
+
+async function loadSheetData() {
+  const meta = METRICS[currentMetric];
+  const range = RANGES[currentRange];
+  const canvas = document.getElementById("detailChart");
+  const msg = document.getElementById("sheetMsg");
+
+  msg.style.display = "none";
+  try {
+    const points = await fetchChart(currentMetric, range.hours, range.resolution);
+    if (points.length < 2) {
+      prepCanvas(canvas);
+      msg.textContent = "Pas encore assez de données sur cette période.";
+      msg.style.display = "block";
+      ["statMin", "statAvg", "statMax"].forEach((id) => (document.getElementById(id).textContent = "--"));
+      return;
+    }
+    drawDetailChart(canvas, points, meta, range.hours);
+
+    const vals = points.map((p) => p.v);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const f = (v) => v.toFixed(meta.decimals) + " " + meta.unit;
+    document.getElementById("statMin").textContent = f(Math.min(...vals));
+    document.getElementById("statAvg").textContent = f(avg);
+    document.getElementById("statMax").textContent = f(Math.max(...vals));
+  } catch (err) {
+    console.error(err);
+    prepCanvas(canvas);
+    msg.textContent = "Impossible de charger l'historique.";
+    msg.style.display = "block";
+  }
+}
+
+function openSheet(metric) {
+  currentMetric = metric;
+  const meta = METRICS[metric];
+  document.getElementById("sheetLabel").textContent = meta.label;
+
+  const liveEl = { temperature: "tempValue", humidite: "humValue", pression: "presValue" }[metric];
+  document.getElementById("sheetValue").innerHTML = document.getElementById(liveEl).innerHTML;
+
+  buildRangeButtons();
+  document.getElementById("backdrop").classList.add("open");
+  document.getElementById("sheet").classList.add("open");
+  document.body.classList.add("sheet-open");
+  // laisse le sheet se positionner avant de mesurer le canvas
+  setTimeout(loadSheetData, 80);
+}
+
+function closeSheet() {
+  document.getElementById("backdrop").classList.remove("open");
+  document.getElementById("sheet").classList.remove("open");
+  document.body.classList.remove("sheet-open");
+  currentMetric = null;
+}
+
+document.querySelectorAll(".card").forEach((card) => {
+  card.addEventListener("click", () => openSheet(card.dataset.metric));
+});
+document.getElementById("backdrop").addEventListener("click", closeSheet);
+document.getElementById("closeBtn").addEventListener("click", closeSheet);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+
+/* ---------- Boucle principale ---------- */
+
 async function refresh() {
   try {
     const [temp, hum, pres, presHistory] = await Promise.all([
-      fetchLast(FEED_TEMP),
-      fetchLast(FEED_HUM),
-      fetchLast(FEED_PRES),
-      fetchHistory(FEED_PRES, 20),
+      fetchLast("temperature"),
+      fetchLast("humidite"),
+      fetchLast("pression"),
+      fetchChart("pression", 6, 5),
     ]);
 
     const tempVal = parseFloat(temp.value);
@@ -214,18 +473,21 @@ async function refresh() {
     setRing(document.getElementById("humRing"), humVal / 100, "#56ccf2");
 
     if (presHistory.length >= 2) {
-      const first = parseFloat(presHistory[0].value);
-      const last = parseFloat(presHistory[presHistory.length - 1].value);
-      const delta = last - first;
-      const trendEl = document.getElementById("presTrend");
-      trendEl.textContent = delta > 0.5 ? `↗ +${delta.toFixed(1)}` : delta < -0.5 ? `↘ ${delta.toFixed(1)}` : "→ stable";
-      drawChart(presHistory);
+      const delta = presHistory[presHistory.length - 1].v - presHistory[0].v;
+      document.getElementById("presTrend").textContent =
+        delta > 0.5 ? `↗ +${delta.toFixed(1)}` : delta < -0.5 ? `↘ ${delta.toFixed(1)}` : "→ stable";
+      drawSparkline(document.getElementById("chart"), presHistory, METRICS.pression.color);
     }
 
     document.getElementById("statusDot").classList.remove("offline");
     document.getElementById("statusText").textContent = "En ligne";
     document.getElementById("lastUpdate").textContent =
       "Mis à jour à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+    if (currentMetric) {
+      document.getElementById("sheetValue").innerHTML =
+        document.getElementById({ temperature: "tempValue", humidite: "humValue", pression: "presValue" }[currentMetric]).innerHTML;
+    }
   } catch (err) {
     document.getElementById("statusDot").classList.add("offline");
     document.getElementById("statusText").textContent = "Hors ligne / erreur";
@@ -233,8 +495,18 @@ async function refresh() {
   }
 }
 
+function setRing(el, pct, color) {
+  const clamped = Math.max(0, Math.min(1, pct));
+  el.setAttribute("stroke-dasharray", `${RING_CIRCUMFERENCE * clamped} ${RING_CIRCUMFERENCE}`);
+  if (color) el.setAttribute("stroke", color);
+}
+
 refresh();
 setInterval(refresh, REFRESH_MS);
+
+window.addEventListener("resize", () => {
+  if (currentMetric) loadSheetData();
+});
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("service-worker.js"));
