@@ -42,6 +42,17 @@
   header { text-align: center; margin-bottom: 4px; }
   header h1 { font-size: 1.3rem; margin: 0 0 4px; font-weight: 600; letter-spacing: 0.02em; }
   header p { margin: 0; color: var(--text-dim); font-size: 0.8rem; }
+  .forecast {
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 14px 18px;
+    backdrop-filter: blur(10px);
+  }
+  .forecast .fc-icon { font-size: 2rem; line-height: 1; flex-shrink: 0; }
+  .forecast .fc-title { font-size: 1rem; font-weight: 600; }
+  .forecast .fc-sub { font-size: 0.74rem; color: var(--text-dim); margin-top: 3px; line-height: 1.35; }
   .cards { display: flex; flex-direction: column; gap: 14px; flex: 1; }
   .card {
     background: var(--card-bg);
@@ -172,6 +183,14 @@
   <h1>🏠 Météo Maison</h1>
   <p><span class="dot" id="statusDot"></span><span id="statusText">Chargement…</span></p>
 </header>
+
+<div class="forecast" id="forecast">
+  <div class="fc-icon" id="fcIcon">⏳</div>
+  <div>
+    <div class="fc-title" id="fcTitle">Analyse en cours…</div>
+    <div class="fc-sub" id="fcSub">Quelques heures de mesures sont nécessaires</div>
+  </div>
+</div>
 
 <div class="cards">
 
@@ -589,6 +608,53 @@ document.getElementById("backdrop").addEventListener("click", closeSheet);
 document.getElementById("closeBtn").addEventListener("click", closeSheet);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 
+/* ---------- Prévision selon la tendance barométrique ---------- */
+
+// Seuils meteo classiques, exprimes en hPa par 3 h.
+function forecastFromTrend(d) {
+  if (d <= -6)   return { icon: "⛈️", title: "Dégradation rapide", sub: "Vent et pluie probables" };
+  if (d <= -3.5) return { icon: "🌧️", title: "Dégradation marquée", sub: "Pluie probable" };
+  if (d <= -1.6) return { icon: "🌦️", title: "Dégradation", sub: "Le temps se couvre" };
+  if (d <= -0.6) return { icon: "🌥️", title: "Légère dégradation", sub: "Nuages en approche" };
+  if (d <   0.6) return { icon: "🌤️", title: "Temps stable",       sub: "Pas de changement notable" };
+  if (d <   1.6) return { icon: "🌤️", title: "Légère amélioration", sub: "Éclaircies possibles" };
+  if (d <   3.5) return { icon: "☀️", title: "Amélioration",        sub: "Le temps se dégage" };
+  if (d <     6) return { icon: "☀️", title: "Amélioration marquée", sub: "Beau temps qui s'installe" };
+  return { icon: "☀️", title: "Amélioration rapide", sub: "Ciel dégagé, parfois venteux" };
+}
+
+function setForecast(icon, title, sub) {
+  document.getElementById("fcIcon").textContent = icon;
+  document.getElementById("fcTitle").textContent = title;
+  document.getElementById("fcSub").textContent = sub;
+}
+
+async function updateForecast() {
+  try {
+    const pts = await fetchChart("pression", 3, 5);
+    if (pts.length < 2) {
+      setForecast("⏳", "Analyse en cours…", "En attente des premières mesures");
+      return;
+    }
+
+    const spanH = (pts[pts.length - 1].t - pts[0].t) / 3600000;
+    if (spanH < 2) {
+      const reste = Math.max(1, Math.ceil(2 - spanH));
+      setForecast("⏳", "Analyse en cours…", `Encore ~${reste} h de mesures nécessaires`);
+      return;
+    }
+
+    const delta = pts[pts.length - 1].v - pts[0].v;
+    const delta3h = delta * (3 / spanH); // ramene a la reference 3 h
+    const f = forecastFromTrend(delta3h);
+    const signe = delta > 0 ? "+" : "";
+    setForecast(f.icon, f.title, `${f.sub} · ${signe}${delta.toFixed(1)} hPa en ${spanH.toFixed(1)} h`);
+  } catch (err) {
+    console.error(err);
+    setForecast("⏳", "Prévision indisponible", "Impossible de lire la tendance");
+  }
+}
+
 /* ---------- Boucle principale ---------- */
 
 async function refresh() {
@@ -642,7 +708,8 @@ function setRing(el, pct, color) {
 }
 
 refresh();
-setInterval(refresh, REFRESH_MS);
+updateForecast();
+setInterval(() => { refresh(); updateForecast(); }, REFRESH_MS);
 
 window.addEventListener("resize", () => {
   if (currentMetric) loadSheetData();
