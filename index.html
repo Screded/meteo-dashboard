@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Météo Maison</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1a2140">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Météo">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg-top: #1a2140;
+    --bg-bottom: #402a63;
+    --card-bg: rgba(255,255,255,0.07);
+    --card-border: rgba(255,255,255,0.12);
+    --text: #f2f3fb;
+    --text-dim: #a7acc9;
+    --accent-hot: #eb5757;
+    --accent-cold: #56ccf2;
+    --accent-humidity: #56ccf2;
+    --accent-pressure: #9b8cff;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+    color: var(--text);
+    overscroll-behavior: none;
+  }
+  body {
+    min-height: 100dvh;
+    padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  header { text-align: center; margin-bottom: 4px; }
+  header h1 { font-size: 1.3rem; margin: 0 0 4px; font-weight: 600; letter-spacing: 0.02em; }
+  header p { margin: 0; color: var(--text-dim); font-size: 0.8rem; }
+  .cards { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 18px 20px;
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .card .label { font-size: 0.82rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  .card .value { font-size: 2.4rem; font-weight: 700; line-height: 1; margin-top: 6px; }
+  .card .unit { font-size: 1.1rem; font-weight: 400; color: var(--text-dim); margin-left: 4px; }
+  .ring { position: relative; width: 84px; height: 84px; flex-shrink: 0; }
+  .ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+  .ring circle { fill: none; stroke-width: 8; }
+  .ring .bg { stroke: rgba(255,255,255,0.1); }
+  .ring .fg { stroke-linecap: round; transition: stroke-dasharray 0.6s ease; }
+  .pressure-row { flex-direction: column; align-items: stretch; }
+  .pressure-top { display: flex; justify-content: space-between; align-items: baseline; }
+  canvas#chart { width: 100%; height: 70px; margin-top: 8px; }
+  footer { text-align: center; color: var(--text-dim); font-size: 0.72rem; padding-top: 4px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #6fcf97; margin-right: 5px; }
+  .dot.offline { background: #eb5757; }
+  .refresh-hint { text-align: center; color: var(--text-dim); font-size: 0.7rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏠 Météo Maison</h1>
+  <p><span class="dot" id="statusDot"></span><span id="statusText">Chargement…</span></p>
+</header>
+
+<div class="cards">
+
+  <div class="card">
+    <div>
+      <div class="label">Température</div>
+      <div class="value" id="tempValue">--<span class="unit">°C</span></div>
+    </div>
+    <div class="ring">
+      <svg viewBox="0 0 84 84">
+        <circle class="bg" cx="42" cy="42" r="36"></circle>
+        <circle class="fg" id="tempRing" cx="42" cy="42" r="36" stroke="var(--accent-hot)"></circle>
+      </svg>
+    </div>
+  </div>
+
+  <div class="card">
+    <div>
+      <div class="label">Humidité</div>
+      <div class="value" id="humValue">--<span class="unit">%</span></div>
+    </div>
+    <div class="ring">
+      <svg viewBox="0 0 84 84">
+        <circle class="bg" cx="42" cy="42" r="36"></circle>
+        <circle class="fg" id="humRing" cx="42" cy="42" r="36" stroke="var(--accent-humidity)"></circle>
+      </svg>
+    </div>
+  </div>
+
+  <div class="card pressure-row">
+    <div class="pressure-top">
+      <div>
+        <div class="label">Pression</div>
+        <div class="value" id="presValue">--<span class="unit">hPa</span></div>
+      </div>
+      <div class="label" id="presTrend">--</div>
+    </div>
+    <canvas id="chart"></canvas>
+  </div>
+
+</div>
+
+<p class="refresh-hint" id="lastUpdate">--</p>
+
+<footer>Données via Adafruit IO &middot; ESP32-C3</footer>
+
+<script>
+const USERNAME = "latruite73";
+const FEED_TEMP = "temperature";
+const FEED_HUM = "humidite";
+const FEED_PRES = "pression";
+const REFRESH_MS = 60000;
+
+const TEMP_MIN = 0, TEMP_MAX = 40;
+const RING_CIRCUMFERENCE = 2 * Math.PI * 36;
+
+function setRing(el, pct, color) {
+  const clamped = Math.max(0, Math.min(1, pct));
+  el.setAttribute("stroke-dasharray", `${RING_CIRCUMFERENCE * clamped} ${RING_CIRCUMFERENCE}`);
+  if (color) el.setAttribute("stroke", color);
+}
+
+async function fetchLast(feed) {
+  const res = await fetch(`https://io.adafruit.com/api/v2/${USERNAME}/feeds/${feed}/data?limit=1`);
+  if (!res.ok) throw new Error(`${feed}: ${res.status}`);
+  const data = await res.json();
+  return data[0];
+}
+
+async function fetchHistory(feed, limit = 20) {
+  const res = await fetch(`https://io.adafruit.com/api/v2/${USERNAME}/feeds/${feed}/data?limit=${limit}`);
+  if (!res.ok) throw new Error(`${feed}: ${res.status}`);
+  const data = await res.json();
+  return data.reverse();
+}
+
+function drawChart(points) {
+  const canvas = document.getElementById("chart");
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  const values = points.map((p) => parseFloat(p.value));
+  if (values.length < 2) return;
+  const min = Math.min(...values), max = Math.max(...values);
+  const pad = (max - min) * 0.15 || 1;
+  const lo = min - pad, hi = max + pad;
+
+  const w = rect.width, h = rect.height;
+  ctx.beginPath();
+  values.forEach((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - lo) / (hi - lo)) * h;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = "#9b8cff";
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, "rgba(155,140,255,0.35)");
+  grad.addColorStop(1, "rgba(155,140,255,0)");
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+async function refresh() {
+  try {
+    const [temp, hum, pres, presHistory] = await Promise.all([
+      fetchLast(FEED_TEMP),
+      fetchLast(FEED_HUM),
+      fetchLast(FEED_PRES),
+      fetchHistory(FEED_PRES, 20),
+    ]);
+
+    const tempVal = parseFloat(temp.value);
+    const humVal = parseFloat(hum.value);
+    const presVal = parseFloat(pres.value);
+
+    document.getElementById("tempValue").innerHTML = `${tempVal.toFixed(1)}<span class="unit">°C</span>`;
+    document.getElementById("humValue").innerHTML = `${humVal.toFixed(0)}<span class="unit">%</span>`;
+    document.getElementById("presValue").innerHTML = `${presVal.toFixed(0)}<span class="unit">hPa</span>`;
+
+    setRing(document.getElementById("tempRing"), (tempVal - TEMP_MIN) / (TEMP_MAX - TEMP_MIN),
+      tempVal >= 25 ? "#eb5757" : tempVal <= 15 ? "#56ccf2" : "#f2c94c");
+    setRing(document.getElementById("humRing"), humVal / 100, "#56ccf2");
+
+    if (presHistory.length >= 2) {
+      const first = parseFloat(presHistory[0].value);
+      const last = parseFloat(presHistory[presHistory.length - 1].value);
+      const delta = last - first;
+      const trendEl = document.getElementById("presTrend");
+      trendEl.textContent = delta > 0.5 ? `↗ +${delta.toFixed(1)}` : delta < -0.5 ? `↘ ${delta.toFixed(1)}` : "→ stable";
+      drawChart(presHistory);
+    }
+
+    document.getElementById("statusDot").classList.remove("offline");
+    document.getElementById("statusText").textContent = "En ligne";
+    document.getElementById("lastUpdate").textContent =
+      "Mis à jour à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  } catch (err) {
+    document.getElementById("statusDot").classList.add("offline");
+    document.getElementById("statusText").textContent = "Hors ligne / erreur";
+    console.error(err);
+  }
+}
+
+refresh();
+setInterval(refresh, REFRESH_MS);
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("service-worker.js"));
+}
+</script>
+
+</body>
+</html>
