@@ -103,6 +103,7 @@
   .card .label { font-size: 0.82rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
   .card .value { font-size: 2.4rem; font-weight: 700; line-height: 1; margin-top: 6px; }
   .card .unit { font-size: 1.1rem; font-weight: 400; color: var(--text-dim); margin-left: 4px; }
+  .card .qualif { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; }
   .card.attente { opacity: 0.55; }
   .ring { position: relative; width: 84px; height: 84px; flex-shrink: 0; }
   .ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
@@ -254,6 +255,20 @@
     </div>
   </div>
 
+  <div class="card" data-metric="rosee">
+    <div>
+      <div class="label">Point de rosée</div>
+      <div class="value" id="roseeValue">--<span class="unit">°C</span></div>
+      <div class="qualif" id="roseeQualif">&nbsp;</div>
+    </div>
+    <div class="ring">
+      <svg viewBox="0 0 84 84">
+        <circle class="bg" cx="42" cy="42" r="36"></circle>
+        <circle class="fg" id="roseeRing" cx="42" cy="42" r="36" stroke="#6fcf97"></circle>
+      </svg>
+    </div>
+  </div>
+
   <div class="card pressure-row" data-metric="pression">
     <div class="pressure-top">
       <div>
@@ -316,10 +331,28 @@ let stationActive = STATIONS[0].id;
 const dernieres = {}; // { [stationId]: {ok, temp, hum} }
 
 const METRICS = {
-  temperature: { label: "Température", unit: "°C", decimals: 1, parStation: true },
-  humidite:    { label: "Humidité",    unit: "%",  decimals: 0, parStation: true },
-  pression:    { label: "Pression",    unit: "hPa", decimals: 1, parStation: false, color: "#9b8cff" },
+  temperature: { label: "Température",   unit: "°C", decimals: 1, parStation: true },
+  humidite:    { label: "Humidité",      unit: "%",  decimals: 0, parStation: true },
+  rosee:       { label: "Point de rosée", unit: "°C", decimals: 1, parStation: true, derive: true },
+  pression:    { label: "Pression",      unit: "hPa", decimals: 1, parStation: false, color: "#9b8cff" },
 };
+
+// Point de rosee (formule de Magnus) : temperature a laquelle l'air deposerait
+// sa vapeur. Contrairement a l'humidite relative, il ne depend pas de la
+// temperature ambiante — c'est lui qui dit si deux capteurs mesurent le meme air.
+function pointRosee(tempC, rh) {
+  const a = Math.log(rh / 100) + (17.625 * tempC) / (243.04 + tempC);
+  return (243.04 * a) / (17.625 - a);
+}
+
+// Echelle de confort classique du point de rosee.
+function qualifieRosee(td) {
+  if (td < 10) return "air sec";
+  if (td < 14) return "confortable";
+  if (td < 17) return "légèrement humide";
+  if (td < 20) return "lourd";
+  return "très lourd";
+}
 
 // Paliers de couleur : la teinte de l'anneau suit la valeur mesuree.
 const TEMP_STOPS = [
@@ -336,6 +369,14 @@ const HUM_STOPS = [
   [45, "#6fcf97"],  // confortable
   [65, "#56ccf2"],
   [85, "#2f80ed"],  // tres humide
+];
+const ROSEE_STOPS = [
+  [5,  "#2f80ed"],  // tres sec
+  [10, "#56ccf2"],
+  [14, "#6fcf97"],  // confortable
+  [17, "#f2c94c"],
+  [20, "#f2994a"],  // lourd
+  [23, "#eb5757"],  // tres lourd
 ];
 
 function hexToRgb(h) {
@@ -382,6 +423,28 @@ async function fetchChart(feed, hours, resolution) {
   return (json.data || [])
     .map(([date, value]) => ({ t: new Date(date), v: parseFloat(value) }))
     .filter((p) => !isNaN(p.v));
+}
+
+// Le point de rosee n'a pas de feed : il se recalcule a partir des deux
+// historiques de la station, apparies par horodatage.
+async function fetchRoseeChart(station, hours, resolution) {
+  const [temps, hums] = await Promise.all([
+    fetchChart(station.feeds.temperature, hours, resolution),
+    fetchChart(station.feeds.humidite, hours, resolution),
+  ]);
+  if (!temps.length || !hums.length) return [];
+  return temps
+    .map((p) => {
+      const q = pointLePlusProche({ points: hums }, p.t.getTime());
+      if (!q || Math.abs(q.t - p.t) > 15 * 60000) return null; // pas d'appariement au-dela de 15 min
+      return { t: p.t, v: pointRosee(p.v, q.v) };
+    })
+    .filter((p) => p && isFinite(p.v));
+}
+
+async function chargeSerie(metric, station, range) {
+  if (metric === "rosee") return fetchRoseeChart(station, range.hours, range.resolution);
+  return fetchChart(station.feeds[metric], range.hours, range.resolution);
 }
 
 // Une station absente (feed pas encore cree) ne doit pas casser la page.
@@ -626,14 +689,20 @@ async function loadSheetData() {
   // Une serie par station pour les mesures locales, une seule pour la pression.
   const cibles = meta.parStation
     ? STATIONS.filter((s) => dernieres[s.id] && dernieres[s.id].ok)
-        .map((s) => ({ feed: s.feeds[currentMetric], color: s.color, label: s.label, principale: s.id === stationActive }))
-    : [{ feed: FEED_PRESSION, color: meta.color, label: "Pression", principale: true }];
+        .map((s) => ({
+          color: s.color, label: s.label, principale: s.id === stationActive,
+          charge: () => chargeSerie(currentMetric, s, range),
+        }))
+    : [{
+        color: meta.color, label: "Pression", principale: true,
+        charge: () => fetchChart(FEED_PRESSION, range.hours, range.resolution),
+      }];
 
   if (!cibles.some((c) => c.principale) && cibles.length) cibles[0].principale = true;
 
   try {
     const series = await Promise.all(
-      cibles.map(async (c) => ({ ...c, points: await fetchChart(c.feed, range.hours, range.resolution) }))
+      cibles.map(async (c) => ({ ...c, points: await c.charge() }))
     );
     const utiles = series.filter((s) => s.points.length >= 2);
     const principale = utiles.find((s) => s.principale) || utiles[0];
@@ -679,7 +748,9 @@ async function loadSheetData() {
 /* ---------- Exploration du graphique ---------- */
 
 function hideTooltip() {
-  document.getElementById("tooltip").classList.remove("show");
+  const tip = document.getElementById("tooltip");
+  tip.classList.remove("show");
+  tip.innerHTML = ""; // evite d'afficher la valeur d'une metrique precedente
 }
 
 function fmtPointTime(d, hours) {
@@ -736,7 +807,9 @@ function scrub(clientX) {
   let active = false;
   canvas.addEventListener("pointerdown", (e) => {
     active = true;
-    canvas.setPointerCapture(e.pointerId);
+    // setPointerCapture leve une exception si le pointeur n'est plus actif :
+    // sans ce garde-fou, l'exploration du graphique ne demarre pas du tout.
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
     scrub(e.clientX);
   });
   canvas.addEventListener("pointermove", (e) => {
@@ -762,8 +835,8 @@ function openSheet(metric) {
   document.getElementById("sheetLabel").textContent =
     meta.parStation ? `${meta.label} · ${stationLabel(stationActive)}` : meta.label;
 
-  const liveEl = { temperature: "tempValue", humidite: "humValue", pression: "presValue" }[metric];
-  document.getElementById("sheetValue").innerHTML = document.getElementById(liveEl).innerHTML;
+  document.getElementById("sheetValue").innerHTML =
+    document.getElementById(ELEMENT_VALEUR[metric]).innerHTML;
 
   buildRangeButtons();
   document.getElementById("backdrop").classList.add("open");
@@ -819,31 +892,41 @@ function buildStationTabs() {
   });
 }
 
+const ELEMENT_VALEUR = {
+  temperature: "tempValue", humidite: "humValue", rosee: "roseeValue", pression: "presValue",
+};
+
 function afficherStation() {
   const d = dernieres[stationActive];
-  const carteTemp = document.querySelector('[data-metric="temperature"]');
-  const carteHum = document.querySelector('[data-metric="humidite"]');
+  const cartes = ["temperature", "humidite", "rosee"].map((m) =>
+    document.querySelector(`[data-metric="${m}"]`));
 
   if (!d || !d.ok) {
     document.getElementById("tempValue").innerHTML = `--<span class="unit">°C</span>`;
     document.getElementById("humValue").innerHTML = `--<span class="unit">%</span>`;
-    setRing(document.getElementById("tempRing"), 0, "rgba(255,255,255,0.2)");
-    setRing(document.getElementById("humRing"), 0, "rgba(255,255,255,0.2)");
-    carteTemp.classList.add("attente");
-    carteHum.classList.add("attente");
+    document.getElementById("roseeValue").innerHTML = `--<span class="unit">°C</span>`;
+    document.getElementById("roseeQualif").innerHTML = "&nbsp;";
+    ["tempRing", "humRing", "roseeRing"].forEach((id) =>
+      setRing(document.getElementById(id), 0, "rgba(255,255,255,0.2)"));
+    cartes.forEach((c) => c.classList.add("attente"));
     return;
   }
 
-  carteTemp.classList.remove("attente");
-  carteHum.classList.remove("attente");
+  cartes.forEach((c) => c.classList.remove("attente"));
+  const td = pointRosee(d.temp, d.hum);
+
   document.getElementById("tempValue").innerHTML = `${d.temp.toFixed(1)}<span class="unit">°C</span>`;
   document.getElementById("humValue").innerHTML = `${d.hum.toFixed(0)}<span class="unit">%</span>`;
-  setRing(document.getElementById("tempRing"), (d.temp - 0) / 40, colorFor(TEMP_STOPS, d.temp));
+  document.getElementById("roseeValue").innerHTML = `${td.toFixed(1)}<span class="unit">°C</span>`;
+  document.getElementById("roseeQualif").textContent = qualifieRosee(td);
+
+  setRing(document.getElementById("tempRing"), d.temp / 40, colorFor(TEMP_STOPS, d.temp));
   setRing(document.getElementById("humRing"), d.hum / 100, colorFor(HUM_STOPS, d.hum));
+  setRing(document.getElementById("roseeRing"), td / 25, colorFor(ROSEE_STOPS, td));
 
   if (currentMetric && METRICS[currentMetric].parStation) {
-    const liveEl = { temperature: "tempValue", humidite: "humValue" }[currentMetric];
-    document.getElementById("sheetValue").innerHTML = document.getElementById(liveEl).innerHTML;
+    document.getElementById("sheetValue").innerHTML =
+      document.getElementById(ELEMENT_VALEUR[currentMetric]).innerHTML;
   }
 }
 
