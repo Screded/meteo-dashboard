@@ -36,12 +36,9 @@
     padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 10px;
   }
   body.sheet-open { overflow: hidden; }
-  header { text-align: center; margin-bottom: 2px; }
-  header h1 { font-size: 1.3rem; margin: 0 0 4px; font-weight: 600; letter-spacing: 0.02em; }
-  header p { margin: 0; color: var(--text-dim); font-size: 0.8rem; }
 
   .forecast {
     display: flex; align-items: center; gap: 14px;
@@ -75,17 +72,17 @@
   .stations button .st-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .stations button.offline { opacity: 0.55; }
 
-  .cards { display: flex; flex-direction: column; gap: 14px; }
+  .cards { display: flex; flex-direction: column; gap: 10px; }
   .card {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: 20px;
-    padding: 18px 20px;
+    padding: 14px 18px;
     backdrop-filter: blur(10px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     cursor: pointer;
     transition: transform 0.15s ease, background 0.15s ease;
     position: relative;
@@ -103,13 +100,20 @@
   .card .label { font-size: 0.82rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
   .card .value { font-size: 2.4rem; font-weight: 700; line-height: 1; margin-top: 6px; }
   .card .unit { font-size: 1.1rem; font-weight: 400; color: var(--text-dim); margin-left: 4px; }
-  .card .qualif { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; }
+  .qualif { font-size: 0.72rem; color: var(--text-dim); margin-left: 8px; font-weight: 400; }
   .card.attente { opacity: 0.55; }
-  .ring { position: relative; width: 84px; height: 84px; flex-shrink: 0; }
-  .ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
-  .ring circle { fill: none; stroke-width: 8; }
-  .ring .bg { stroke: rgba(255,255,255,0.1); }
-  .ring .fg { stroke-linecap: round; transition: stroke-dasharray 0.6s ease, stroke 0.6s ease; }
+
+  /* Indicateur de tendance : remplace l'ancien anneau. La couleur reprend
+     l'echelle de confort, la fleche et le chiffre apportent l'evolution. */
+  .tendance { text-align: right; flex-shrink: 0; padding-right: 14px; }
+  .tendance .fleche {
+    font-size: 1.02rem; font-weight: 600; white-space: nowrap;
+    font-variant-numeric: tabular-nums; transition: color 0.5s ease;
+  }
+  .tendance .extremes {
+    font-size: 0.66rem; color: var(--text-dim); margin-top: 4px;
+    white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
   .pressure-row { flex-direction: column; align-items: stretch; }
   .pressure-top { display: flex; justify-content: space-between; align-items: baseline; padding-right: 22px; }
   .global-tag {
@@ -117,10 +121,49 @@
     letter-spacing: 0.07em; margin-left: 8px; opacity: 0.8;
   }
   canvas#chart { width: 100%; height: 70px; margin-top: 8px; }
-  footer { text-align: center; color: var(--text-dim); font-size: 0.72rem; padding-top: 4px; }
+  /* Barre de statut : reprend l'ancien en-tete sans lui couter de hauteur. */
+  .statusbar {
+    display: flex; align-items: center; justify-content: space-between;
+    color: var(--text-dim); font-size: 0.7rem; padding: 0 4px;
+  }
+  .statusbar .etat { cursor: pointer; }
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #6fcf97; margin-right: 5px; }
   .dot.offline { background: #eb5757; }
-  .refresh-hint { text-align: center; color: var(--text-dim); font-size: 0.7rem; }
+  .info-btn {
+    background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text-dim); width: 26px; height: 26px; border-radius: 50%;
+    font-size: 0.8rem; font-family: inherit; cursor: pointer; line-height: 1;
+    flex-shrink: 0;
+  }
+
+  /* Panneau d'informations plein ecran */
+  .panel {
+    position: fixed; inset: 0;
+    background: linear-gradient(180deg, #1c2244 0%, #2b1f45 100%);
+    z-index: 20;
+    overflow-y: auto;
+    padding: max(20px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom));
+    transform: translateY(100%);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    -webkit-overflow-scrolling: touch;
+  }
+  .panel.open { transform: translateY(0); }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px; position: sticky; top: -4px;
+    background: inherit; padding: 4px 0;
+  }
+  .panel-head h2 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+  .panel h3 {
+    font-size: 0.82rem; margin: 22px 0 8px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim);
+  }
+  .panel p { font-size: 0.86rem; line-height: 1.5; margin: 0 0 10px; }
+  .panel table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 6px 0 12px; }
+  .panel td { padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.07); vertical-align: top; }
+  .panel td:first-child { white-space: nowrap; padding-right: 12px; color: var(--text-dim); }
+  .panel .puce { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; }
+  .panel .fin { color: var(--text-dim); font-size: 0.72rem; margin-top: 26px; text-align: center; }
 
   /* ---- Bottom sheet historique ---- */
   .backdrop {
@@ -211,11 +254,6 @@
 </head>
 <body>
 
-<header>
-  <h1>🏠 Météo Maison</h1>
-  <p><span class="dot" id="statusDot"></span><span id="statusText">Chargement…</span></p>
-</header>
-
 <div class="forecast" id="forecast">
   <div class="fc-icon" id="fcIcon">⏳</div>
   <div>
@@ -243,11 +281,9 @@
       <div class="label">Température</div>
       <div class="value" id="tempValue">--<span class="unit">°C</span></div>
     </div>
-    <div class="ring">
-      <svg viewBox="0 0 84 84">
-        <circle class="bg" cx="42" cy="42" r="36"></circle>
-        <circle class="fg" id="tempRing" cx="42" cy="42" r="36" stroke="#eb5757"></circle>
-      </svg>
+    <div class="tendance">
+      <div class="fleche" id="tempFleche">--</div>
+      <div class="extremes" id="tempExtremes">&nbsp;</div>
     </div>
   </div>
 
@@ -256,25 +292,20 @@
       <div class="label">Humidité</div>
       <div class="value" id="humValue">--<span class="unit">%</span></div>
     </div>
-    <div class="ring">
-      <svg viewBox="0 0 84 84">
-        <circle class="bg" cx="42" cy="42" r="36"></circle>
-        <circle class="fg" id="humRing" cx="42" cy="42" r="36" stroke="var(--accent-humidity)"></circle>
-      </svg>
+    <div class="tendance">
+      <div class="fleche" id="humFleche">--</div>
+      <div class="extremes" id="humExtremes">&nbsp;</div>
     </div>
   </div>
 
   <div class="card" data-metric="rosee">
     <div>
       <div class="label">Point de rosée</div>
-      <div class="value" id="roseeValue">--<span class="unit">°C</span></div>
-      <div class="qualif" id="roseeQualif">&nbsp;</div>
+      <div class="value" id="roseeValue">--<span class="unit">°C</span><span class="qualif" id="roseeQualif"></span></div>
     </div>
-    <div class="ring">
-      <svg viewBox="0 0 84 84">
-        <circle class="bg" cx="42" cy="42" r="36"></circle>
-        <circle class="fg" id="roseeRing" cx="42" cy="42" r="36" stroke="#6fcf97"></circle>
-      </svg>
+    <div class="tendance">
+      <div class="fleche" id="roseeFleche">--</div>
+      <div class="extremes" id="roseeExtremes">&nbsp;</div>
     </div>
   </div>
 
@@ -291,9 +322,55 @@
 
 </div>
 
-<p class="refresh-hint" id="lastUpdate">--</p>
+<div class="statusbar">
+  <span class="etat" id="etat" title="Toucher pour rafraîchir">
+    <span class="dot" id="statusDot"></span><span id="statusText">Chargement…</span>
+  </span>
+  <button class="info-btn" id="infoBtn" aria-label="Informations">ⓘ</button>
+</div>
 
-<footer>Données via Adafruit IO &middot; ESP32-C3</footer>
+<div class="panel" id="panel">
+  <div class="panel-head">
+    <h2>Comment lire l'appli</h2>
+    <button class="close-btn" id="panelClose" aria-label="Fermer">✕</button>
+  </div>
+
+  <h3>Point de rosée</h3>
+  <p>C'est la température à laquelle il faudrait refroidir l'air pour que sa vapeur d'eau commence à se condenser. Contrairement à l'humidité relative, il ne dépend pas de la température ambiante : c'est une mesure directe de la quantité d'eau réellement présente.</p>
+  <p>Deux capteurs placés dans le même air donnent le même point de rosée, même s'ils affichent des humidités relatives différentes parce qu'ils ne sont pas à la même température. C'est donc lui qu'il faut comparer entre deux endroits.</p>
+  <table>
+    <tr><td><span class="puce" style="background:#2f80ed"></span>moins de 10 °C</td><td>air sec</td></tr>
+    <tr><td><span class="puce" style="background:#6fcf97"></span>10 à 14 °C</td><td>confortable</td></tr>
+    <tr><td><span class="puce" style="background:#f2c94c"></span>14 à 17 °C</td><td>légèrement humide</td></tr>
+    <tr><td><span class="puce" style="background:#f2994a"></span>17 à 20 °C</td><td>lourd</td></tr>
+    <tr><td><span class="puce" style="background:#eb5757"></span>plus de 20 °C</td><td>très lourd, étouffant</td></tr>
+  </table>
+  <p>Autre usage : toute surface plus froide que le point de rosée se couvre de condensation. C'est le mécanisme des vitres embuées et des moisissures dans les angles mal isolés.</p>
+
+  <h3>Faut-il aérer ?</h3>
+  <p>Le verdict compare le <strong>point de rosée</strong> des deux stations, jamais l'humidité relative — qui ferait ouvrir la fenêtre au mauvais moment.</p>
+  <table>
+    <tr><td>🪟 Aérez maintenant</td><td>plus de 2 °C plus sec dehors</td></tr>
+    <tr><td>🪟 Aération favorable</td><td>0,5 à 2 °C plus sec</td></tr>
+    <tr><td>➖ Aération neutre</td><td>moins de 0,5 °C d'écart</td></tr>
+    <tr><td>🚪 Aération peu utile</td><td>0,5 à 2 °C plus humide</td></tr>
+    <tr><td>🚫 Évitez d'aérer</td><td>plus de 2 °C plus humide</td></tr>
+  </table>
+  <p>Une seconde phrase signale l'effet sur la température, quand il dépasse 3 °C. Un écart n'est pas un défaut en soi : se rafraîchir quand il fait trop chaud dedans est un bénéfice, perdre son chauffage en hiver est un coût. La zone de confort retenue est 19 à 24 °C.</p>
+
+  <h3>Prévision</h3>
+  <p>Elle croise le <strong>niveau</strong> de pression, ramené au niveau de la mer avec l'altitude du capteur (330 m) et la température extérieure, avec sa <strong>tendance</strong> sur 3 heures. C'est la tendance qui porte l'essentiel de l'information : une pression qui chute annonce une dégradation, une pression qui monte une amélioration.</p>
+  <p>Repères de niveau : au-dessus de 1020 hPa régime anticyclonique, autour de 1013 hPa normale, en dessous de 1005 hPa régime dépressionnaire.</p>
+
+  <h3>Flèches et extrêmes</h3>
+  <p>À droite de chaque mesure, la flèche donne l'évolution ramenée à une heure, et sa couleur reprend l'échelle de confort. En dessous figurent le minimum et le maximum des dernières 24 heures.</p>
+
+  <h3>Les deux stations</h3>
+  <p>Chaque station mesure sa température et son humidité. La <strong>pression n'est pas dupliquée</strong> : c'est une grandeur commune, identique partout à altitude égale, donc une seule mesure suffit et elle reste affichée quelle que soit la station choisie.</p>
+  <p>Le point de rosée n'est pas mesuré mais recalculé dans la page à partir de la température et de l'humidité.</p>
+
+  <p class="fin">Capteurs AHT20 + BMP280 sur ESP32-C3 · relevés toutes les 60 s via Adafruit IO<br>Historique conservé 30 jours</p>
+</div>
 
 <div class="backdrop" id="backdrop"></div>
 <div class="sheet" id="sheet">
@@ -338,6 +415,7 @@ const FEED_PRESSION = "pression";
 
 let stationActive = STATIONS[0].id;
 const dernieres = {}; // { [stationId]: {ok, temp, hum} }
+const tendances = {}; // { [stationId]: { [mesure]: {delta, min, max} } }
 
 const METRICS = {
   temperature: { label: "Température",   unit: "°C", decimals: 1, parStation: true },
@@ -449,6 +527,53 @@ async function fetchRoseeChart(station, hours, resolution) {
       return { t: p.t, v: pointRosee(p.v, q.v) };
     })
     .filter((p) => p && isFinite(p.v));
+}
+
+// Evolution ramenee a l'heure + extremes sur la fenetre fournie.
+// L'historique est agrege par tranches de 30 min : ses moyennes peuvent etre
+// moins marquees que la mesure instantanee, d'ou l'ajout de cette derniere aux
+// extremes — sinon la carte afficherait une valeur hors de son propre min/max.
+function resume(pts, actuel) {
+  if (!pts || pts.length < 2) return null;
+  const vals = pts.map((p) => p.v);
+  if (isFinite(actuel)) vals.push(actuel);
+  const dernier = pts[pts.length - 1];
+  const ref = pointLePlusProche({ points: pts }, dernier.t.getTime() - 3600000);
+  const heures = (dernier.t - ref.t) / 3600000;
+  return {
+    // en dessous d'un quart d'heure d'ecart, le taux horaire n'a pas de sens
+    delta: heures >= 0.25 ? (dernier.v - ref.v) / heures : null,
+    min: Math.min(...vals),
+    max: Math.max(...vals),
+  };
+}
+
+// Deux requetes par station : le point de rosee se deduit des deux autres.
+async function chargeTendances() {
+  await Promise.all(STATIONS.map(async (s) => {
+    if (!dernieres[s.id] || !dernieres[s.id].ok) { tendances[s.id] = null; return; }
+    try {
+      const [temps, hums] = await Promise.all([
+        fetchChart(s.feeds.temperature, 24, 30),
+        fetchChart(s.feeds.humidite, 24, 30),
+      ]);
+      const rosees = temps
+        .map((p) => {
+          const q = pointLePlusProche({ points: hums }, p.t.getTime());
+          if (!q || Math.abs(q.t - p.t) > 15 * 60000) return null;
+          return { t: p.t, v: pointRosee(p.v, q.v) };
+        })
+        .filter((p) => p && isFinite(p.v));
+      const d = dernieres[s.id];
+      tendances[s.id] = {
+        temperature: resume(temps, d.temp),
+        humidite: resume(hums, d.hum),
+        rosee: resume(rosees, pointRosee(d.temp, d.hum)),
+      };
+    } catch (err) {
+      tendances[s.id] = null;
+    }
+  }));
 }
 
 async function chargeSerie(metric, station, range) {
@@ -904,20 +1029,23 @@ function buildStationTabs() {
 const ELEMENT_VALEUR = {
   temperature: "tempValue", humidite: "humValue", rosee: "roseeValue", pression: "presValue",
 };
+const ELEMENT_FLECHE = { temperature: "tempFleche", humidite: "humFleche", rosee: "roseeFleche" };
+const ELEMENT_EXTREMES = { temperature: "tempExtremes", humidite: "humExtremes", rosee: "roseeExtremes" };
+const MESURES_LOCALES = ["temperature", "humidite", "rosee"];
+
+// En deca de ce seuil (par heure) on considere la mesure stable.
+const SEUILS_TENDANCE = { temperature: 0.2, humidite: 1.0, rosee: 0.2 };
 
 function afficherStation() {
   const d = dernieres[stationActive];
-  const cartes = ["temperature", "humidite", "rosee"].map((m) =>
-    document.querySelector(`[data-metric="${m}"]`));
+  const cartes = MESURES_LOCALES.map((m) => document.querySelector(`[data-metric="${m}"]`));
 
   if (!d || !d.ok) {
     document.getElementById("tempValue").innerHTML = `--<span class="unit">°C</span>`;
     document.getElementById("humValue").innerHTML = `--<span class="unit">%</span>`;
     document.getElementById("roseeValue").innerHTML = `--<span class="unit">°C</span>`;
-    document.getElementById("roseeQualif").innerHTML = "&nbsp;";
-    ["tempRing", "humRing", "roseeRing"].forEach((id) =>
-      setRing(document.getElementById(id), 0, "rgba(255,255,255,0.2)"));
     cartes.forEach((c) => c.classList.add("attente"));
+    afficherTendances();
     return;
   }
 
@@ -926,17 +1054,51 @@ function afficherStation() {
 
   document.getElementById("tempValue").innerHTML = `${d.temp.toFixed(1)}<span class="unit">°C</span>`;
   document.getElementById("humValue").innerHTML = `${d.hum.toFixed(0)}<span class="unit">%</span>`;
-  document.getElementById("roseeValue").innerHTML = `${td.toFixed(1)}<span class="unit">°C</span>`;
-  document.getElementById("roseeQualif").textContent = qualifieRosee(td);
+  document.getElementById("roseeValue").innerHTML =
+    `${td.toFixed(1)}<span class="unit">°C</span><span class="qualif">${qualifieRosee(td)}</span>`;
 
-  setRing(document.getElementById("tempRing"), d.temp / 40, colorFor(TEMP_STOPS, d.temp));
-  setRing(document.getElementById("humRing"), d.hum / 100, colorFor(HUM_STOPS, d.hum));
-  setRing(document.getElementById("roseeRing"), td / 25, colorFor(ROSEE_STOPS, td));
+  afficherTendances();
 
   if (currentMetric && METRICS[currentMetric].parStation) {
     document.getElementById("sheetValue").innerHTML =
       document.getElementById(ELEMENT_VALEUR[currentMetric]).innerHTML;
   }
+}
+
+// La couleur de la fleche reprend l'echelle de confort de la mesure.
+function couleurMesure(metric) {
+  const d = dernieres[stationActive];
+  if (!d || !d.ok) return "var(--text-dim)";
+  if (metric === "temperature") return colorFor(TEMP_STOPS, d.temp);
+  if (metric === "humidite") return colorFor(HUM_STOPS, d.hum);
+  return colorFor(ROSEE_STOPS, pointRosee(d.temp, d.hum));
+}
+
+function afficherTendances() {
+  const t = tendances[stationActive];
+  MESURES_LOCALES.forEach((m) => {
+    const r = t ? t[m] : null;
+    const meta = METRICS[m];
+    const fleche = document.getElementById(ELEMENT_FLECHE[m]);
+    const extremes = document.getElementById(ELEMENT_EXTREMES[m]);
+
+    if (!r || r.delta === null) {
+      fleche.textContent = "—";
+      fleche.style.color = "var(--text-dim)";
+    } else {
+      const seuil = SEUILS_TENDANCE[m];
+      const stable = Math.abs(r.delta) < seuil;
+      const signe = r.delta > 0 ? "+" : "";
+      fleche.textContent = stable
+        ? "→ stable"
+        : `${r.delta > 0 ? "↗" : "↘"} ${signe}${r.delta.toFixed(meta.decimals)} ${meta.unit}/h`;
+      fleche.style.color = couleurMesure(m);
+    }
+
+    extremes.textContent = r
+      ? `24 h · ${r.min.toFixed(meta.decimals)} – ${r.max.toFixed(meta.decimals)}`
+      : " ";
+  });
 }
 
 /* ---------- Prévision selon la tendance barométrique ---------- */
@@ -1101,13 +1263,6 @@ function majAeration() {
 
 /* ---------- Boucle principale ---------- */
 
-function setRing(el, pct, color) {
-  const clamped = Math.max(0, Math.min(1, pct));
-  const c = 2 * Math.PI * 36;
-  el.setAttribute("stroke-dasharray", `${c * clamped} ${c}`);
-  if (color) el.setAttribute("stroke", color);
-}
-
 async function refresh() {
   try {
     const [etats, pres, presHistory] = await Promise.all([
@@ -1139,21 +1294,48 @@ async function refresh() {
     }
 
     const nbOk = STATIONS.filter((s) => dernieres[s.id].ok).length;
+    const heure = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
     document.getElementById("statusDot").classList.remove("offline");
     document.getElementById("statusText").textContent =
-      nbOk === STATIONS.length ? "En ligne" : `En ligne · ${nbOk}/${STATIONS.length} stations`;
-    document.getElementById("lastUpdate").textContent =
-      "Mis à jour à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      `En ligne · ${nbOk}/${STATIONS.length} stations · ${heure}`;
 
     if (currentMetric === "pression") {
       document.getElementById("sheetValue").innerHTML = document.getElementById("presValue").innerHTML;
     }
+
+    // Les tendances arrivent apres coup : elles ne doivent pas retarder l'affichage.
+    chargeTendances().then(afficherTendances);
   } catch (err) {
     document.getElementById("statusDot").classList.add("offline");
     document.getElementById("statusText").textContent = "Hors ligne / erreur";
     console.error(err);
   }
 }
+
+/* ---------- Panneau d'informations ---------- */
+
+const panneau = document.getElementById("panel");
+document.getElementById("infoBtn").addEventListener("click", () => {
+  panneau.classList.add("open");
+  document.body.classList.add("sheet-open");
+  panneau.scrollTop = 0;
+});
+document.getElementById("panelClose").addEventListener("click", () => {
+  panneau.classList.remove("open");
+  document.body.classList.remove("sheet-open");
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && panneau.classList.contains("open")) {
+    panneau.classList.remove("open");
+    document.body.classList.remove("sheet-open");
+  }
+});
+
+// Rafraichissement manuel : evite d'attendre le cycle d'une minute.
+document.getElementById("etat").addEventListener("click", () => {
+  document.getElementById("statusText").textContent = "Actualisation…";
+  refresh().then(updateForecast);
+});
 
 buildStationTabs();
 refresh().then(updateForecast);
