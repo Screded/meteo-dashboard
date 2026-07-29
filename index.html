@@ -225,6 +225,15 @@
   </div>
 </div>
 
+<div class="forecast" id="aeration">
+  <div class="fc-icon" id="aeIcon">🪟</div>
+  <div>
+    <div class="fc-title" id="aeTitle">Aération</div>
+    <div class="fc-sub" id="aeSub">En attente des deux stations</div>
+    <div class="fc-meta" id="aeMeta"></div>
+  </div>
+</div>
+
 <div class="stations" id="stations"></div>
 
 <div class="cards">
@@ -1016,6 +1025,80 @@ async function updateForecast() {
   }
 }
 
+/* ---------- Faut-il aérer ? ---------- */
+
+// La comparaison se fait sur le POINT DE ROSEE, pas sur l'humidite relative :
+// c'est la seule grandeur qui dit ou l'air contient reellement le plus d'eau.
+const VERDICTS_AERATION = [
+  { max: -2,       icon: "🪟", title: "Aérez maintenant",   sub: "L'air extérieur est nettement plus sec." },
+  { max: -0.5,     icon: "🪟", title: "Aération favorable", sub: "L'air extérieur est un peu plus sec." },
+  { max: 0.5,      icon: "➖", title: "Aération neutre",     sub: "Même humidité réelle des deux côtés." },
+  { max: 2,        icon: "🚪", title: "Aération peu utile",  sub: "L'air extérieur est un peu plus humide." },
+  { max: Infinity, icon: "🚫", title: "Évitez d'aérer",      sub: "Vous feriez entrer de l'humidité." },
+];
+
+// Aérer joue aussi sur la température. Un écart n'est pas un coût en soi :
+// se rafraîchir quand il fait trop chaud dedans est au contraire un bénéfice.
+// On regarde donc si l'aération rapproche ou éloigne de la zone de confort.
+const CONFORT_BAS = 19, CONFORT_HAUT = 24;
+
+function effetThermique(tempInt, tempExt, verdictFavorable) {
+  const dT = tempExt - tempInt;
+  const a = Math.abs(dT);
+  if (a < 3) return { cout: false, texte: "" };
+
+  const refroidit = dT < 0;
+  const benefique = refroidit ? tempInt > CONFORT_HAUT : tempInt < CONFORT_BAS;
+  const sens = refroidit ? "moins" : "plus";
+  const ecarts = `${a.toFixed(0)} °C de ${sens} dehors`;
+
+  // Le connecteur doit accompagner le verdict : un bénéfice thermique n'est
+  // "en prime" que si l'aération est déjà conseillée.
+  if (benefique) {
+    const lien = verdictFavorable ? "En prime il fait" : "Cela dit, il fait";
+    return { cout: false,
+      texte: ` ${lien} ${ecarts} : la maison se ${refroidit ? "rafraîchira" : "réchauffera"}.` };
+  }
+  if (a >= 10) {
+    return { cout: true,
+      texte: ` ${verdictFavorable ? "Mais il fait" : "Et il fait"} ${ecarts} : n'ouvrez pas longtemps.` };
+  }
+  return { cout: true,
+    texte: ` ${verdictFavorable ? "En revanche il fait" : "Et il fait"} ${ecarts}, la maison se ${refroidit ? "refroidira" : "réchauffera"} un peu.` };
+}
+
+function setAeration(icon, title, sub, meta = "") {
+  document.getElementById("aeIcon").textContent = icon;
+  document.getElementById("aeTitle").textContent = title;
+  document.getElementById("aeSub").textContent = sub;
+  document.getElementById("aeMeta").textContent = meta;
+}
+
+function majAeration() {
+  const dedans = dernieres["int"], dehors = dernieres["ext"];
+  if (!dedans || !dedans.ok || !dehors || !dehors.ok) {
+    setAeration("🪟", "Aération", "Nécessite les deux stations", "");
+    return;
+  }
+
+  const tdI = pointRosee(dedans.temp, dedans.hum);
+  const tdE = pointRosee(dehors.temp, dehors.hum);
+  const ecart = tdE - tdI;            // négatif = plus sec dehors
+  const dT = dehors.temp - dedans.temp;
+
+  const v = VERDICTS_AERATION.find((x) => ecart < x.max);
+  const favorable = ecart < -0.5;
+  const thermique = effetThermique(dedans.temp, dehors.temp, favorable);
+
+  // Un gain d'humidite ne justifie pas d'ouvrir grand quand la temperature
+  // exterieure eloigne du confort : on garde le verdict, on tempere l'action.
+  const titre = favorable && thermique.cout && Math.abs(dT) >= 8 ? "Aérez brièvement" : v.title;
+
+  const signe = ecart > 0 ? "+" : "";
+  setAeration(v.icon, titre, v.sub + thermique.texte,
+    `Point de rosée ${tdI.toFixed(1)} °C dedans · ${tdE.toFixed(1)} °C dehors (${signe}${ecart.toFixed(1)})`);
+}
+
 /* ---------- Boucle principale ---------- */
 
 function setRing(el, pct, color) {
@@ -1043,6 +1126,7 @@ async function refresh() {
 
     buildStationTabs();
     afficherStation();
+    majAeration();
 
     const presVal = parseFloat(pres.value);
     document.getElementById("presValue").innerHTML = `${presVal.toFixed(0)}<span class="unit">hPa</span>`;
