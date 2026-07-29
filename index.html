@@ -36,12 +36,13 @@
     padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
   }
   body.sheet-open { overflow: hidden; }
-  header { text-align: center; margin-bottom: 4px; }
+  header { text-align: center; margin-bottom: 2px; }
   header h1 { font-size: 1.3rem; margin: 0 0 4px; font-weight: 600; letter-spacing: 0.02em; }
   header p { margin: 0; color: var(--text-dim); font-size: 0.8rem; }
+
   .forecast {
     display: flex; align-items: center; gap: 14px;
     background: rgba(255,255,255,0.07);
@@ -57,7 +58,24 @@
     font-size: 0.67rem; color: rgba(167,172,201,0.7);
     margin-top: 3px; font-variant-numeric: tabular-nums;
   }
-  .cards { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+
+  /* ---- Sélecteur de station ---- */
+  .stations { display: flex; gap: 8px; }
+  .stations button {
+    flex: 1;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-dim);
+    padding: 10px 6px; border-radius: 14px;
+    font-size: 0.86rem; font-family: inherit; font-weight: 500;
+    cursor: pointer; transition: all 0.15s ease;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+  }
+  .stations button.active { background: rgba(255,255,255,0.18); color: var(--text); border-color: rgba(255,255,255,0.28); }
+  .stations button .st-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .stations button.offline { opacity: 0.55; }
+
+  .cards { display: flex; flex-direction: column; gap: 14px; }
   .card {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
@@ -85,6 +103,7 @@
   .card .label { font-size: 0.82rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
   .card .value { font-size: 2.4rem; font-weight: 700; line-height: 1; margin-top: 6px; }
   .card .unit { font-size: 1.1rem; font-weight: 400; color: var(--text-dim); margin-left: 4px; }
+  .card.attente { opacity: 0.55; }
   .ring { position: relative; width: 84px; height: 84px; flex-shrink: 0; }
   .ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
   .ring circle { fill: none; stroke-width: 8; }
@@ -92,6 +111,10 @@
   .ring .fg { stroke-linecap: round; transition: stroke-dasharray 0.6s ease, stroke 0.6s ease; }
   .pressure-row { flex-direction: column; align-items: stretch; }
   .pressure-top { display: flex; justify-content: space-between; align-items: baseline; padding-right: 22px; }
+  .global-tag {
+    font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.07em; margin-left: 8px; opacity: 0.8;
+  }
   canvas#chart { width: 100%; height: 70px; margin-top: 8px; }
   footer { text-align: center; color: var(--text-dim); font-size: 0.72rem; padding-top: 4px; }
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #6fcf97; margin-right: 5px; }
@@ -117,7 +140,7 @@
     transform: translateY(100%);
     transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
     z-index: 11;
-    max-height: 88dvh;
+    max-height: 90dvh;
     overflow-y: auto;
   }
   .sheet.open { transform: translateY(0); }
@@ -126,7 +149,7 @@
     background: rgba(255,255,255,0.25);
     margin: 4px auto 14px;
   }
-  .sheet-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
+  .sheet-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
   .sheet-head .label { font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
   .sheet-head .value { font-size: 2.1rem; font-weight: 700; line-height: 1.1; margin-top: 4px; }
   .sheet-head .unit { font-size: 1rem; font-weight: 400; color: var(--text-dim); margin-left: 3px; }
@@ -135,6 +158,9 @@
     width: 32px; height: 32px; border-radius: 50%;
     font-size: 1.1rem; line-height: 1; cursor: pointer;
   }
+  .legend { display: flex; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+  .legend .item { display: flex; align-items: center; gap: 6px; font-size: 0.74rem; color: var(--text-dim); }
+  .legend .swatch { width: 12px; height: 3px; border-radius: 2px; }
   .ranges { display: flex; gap: 8px; margin-bottom: 14px; }
   .ranges button {
     flex: 1;
@@ -163,7 +189,7 @@
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   }
   .tooltip.show { opacity: 1; }
-  .tooltip .tv { font-weight: 700; font-size: 0.95rem; line-height: 1.1; }
+  .tooltip .tv { font-weight: 700; font-size: 0.95rem; line-height: 1.25; }
   .tooltip .tt { color: var(--text-dim); font-size: 0.68rem; margin-top: 2px; }
   .chart-hint {
     text-align: center; color: var(--text-dim); font-size: 0.68rem;
@@ -178,6 +204,7 @@
   }
   .stat .k { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
   .stat .v { font-size: 1.05rem; font-weight: 600; margin-top: 3px; }
+  .stats-for { text-align: center; color: var(--text-dim); font-size: 0.66rem; margin-top: 7px; }
   .sheet-msg { text-align: center; color: var(--text-dim); font-size: 0.85rem; padding: 30px 0; }
 </style>
 </head>
@@ -196,6 +223,8 @@
     <div class="fc-meta" id="fcMeta"></div>
   </div>
 </div>
+
+<div class="stations" id="stations"></div>
 
 <div class="cards">
 
@@ -228,7 +257,7 @@
   <div class="card pressure-row" data-metric="pression">
     <div class="pressure-top">
       <div>
-        <div class="label">Pression</div>
+        <div class="label">Pression<span class="global-tag">commune</span></div>
         <div class="value" id="presValue">--<span class="unit">hPa</span></div>
       </div>
       <div class="label" id="presTrend">--</div>
@@ -252,6 +281,7 @@
     </div>
     <button class="close-btn" id="closeBtn" aria-label="Fermer">✕</button>
   </div>
+  <div class="legend" id="legend"></div>
   <div class="ranges" id="ranges"></div>
   <div class="chart-wrap">
     <canvas id="detailChart"></canvas>
@@ -263,6 +293,7 @@
     <div class="stat"><div class="k">Moyenne</div><div class="v" id="statAvg">--</div></div>
     <div class="stat"><div class="k">Max</div><div class="v" id="statMax">--</div></div>
   </div>
+  <div class="stats-for" id="statsFor"></div>
   <div class="sheet-msg" id="sheetMsg" style="display:none"></div>
 </div>
 
@@ -270,13 +301,24 @@
 const USERNAME = "latruite73";
 const REFRESH_MS = 60000;
 const ALTITUDE_M = 330; // altitude du capteur, sert a ramener la pression au niveau de la mer
-const RING_CIRCUMFERENCE = 2 * Math.PI * 36;
-const TEMP_MIN = 0, TEMP_MAX = 40;
+
+// Chaque station publie sa temperature et son humidite.
+// La pression est commune a toutes : une seule mesure suffit.
+const STATIONS = [
+  { id: "int", label: "Intérieur", icon: "🏠", color: "#f2c94c",
+    feeds: { temperature: "temperature", humidite: "humidite" } },
+  { id: "ext", label: "Extérieur", icon: "🌤️", color: "#56ccf2",
+    feeds: { temperature: "ext-temperature", humidite: "ext-humidite" } },
+];
+const FEED_PRESSION = "pression";
+
+let stationActive = STATIONS[0].id;
+const dernieres = {}; // { [stationId]: {ok, temp, hum} }
 
 const METRICS = {
-  temperature: { label: "Température", unit: "°C", color: "#eb5757", decimals: 1 },
-  humidite:    { label: "Humidité",    unit: "%",  color: "#56ccf2", decimals: 0 },
-  pression:    { label: "Pression",    unit: "hPa", color: "#9b8cff", decimals: 1 },
+  temperature: { label: "Température", unit: "°C", decimals: 1, parStation: true },
+  humidite:    { label: "Humidité",    unit: "%",  decimals: 0, parStation: true },
+  pression:    { label: "Pression",    unit: "hPa", decimals: 1, parStation: false, color: "#9b8cff" },
 };
 
 // Paliers de couleur : la teinte de l'anneau suit la valeur mesuree.
@@ -327,6 +369,7 @@ async function fetchLast(feed) {
   const res = await fetch(`https://io.adafruit.com/api/v2/${USERNAME}/feeds/${feed}/data?limit=1`);
   if (!res.ok) throw new Error(`${feed}: ${res.status}`);
   const data = await res.json();
+  if (!data.length) throw new Error(`${feed}: aucune donnée`);
   return data[0];
 }
 
@@ -339,6 +382,19 @@ async function fetchChart(feed, hours, resolution) {
   return (json.data || [])
     .map(([date, value]) => ({ t: new Date(date), v: parseFloat(value) }))
     .filter((p) => !isNaN(p.v));
+}
+
+// Une station absente (feed pas encore cree) ne doit pas casser la page.
+async function fetchStation(station) {
+  try {
+    const [t, h] = await Promise.all([
+      fetchLast(station.feeds.temperature),
+      fetchLast(station.feeds.humidite),
+    ]);
+    return { ok: true, temp: parseFloat(t.value), hum: parseFloat(h.value) };
+  } catch (err) {
+    return { ok: false };
+  }
 }
 
 /* ---------- Rendu graphique ---------- */
@@ -381,25 +437,37 @@ function drawSparkline(canvas, points, color) {
   ctx.fill();
 }
 
+/* chartState = { series: [{points, color, label, principale}], meta, hours, geom } */
+let chartState = null;
+let hoverIndex = null;
+
 function drawDetailChart() {
   if (!chartState) return;
-  const { points, meta, hours } = chartState;
+  const { series, meta, hours } = chartState;
   const canvas = document.getElementById("detailChart");
   const { ctx, w, h } = prepCanvas(canvas);
-  if (points.length < 2) return;
+
+  const principale = series.find((s) => s.principale) || series[0];
+  if (!principale || principale.points.length < 2) return;
 
   const padL = 42, padR = 8, padT = 10, padB = 22;
   const plotW = w - padL - padR, plotH = h - padT - padB;
 
-  const values = points.map((p) => p.v);
-  const min = Math.min(...values), max = Math.max(...values);
+  // Echelle verticale commune a toutes les courbes pour que la comparaison soit honnete.
+  const toutes = series.flatMap((s) => s.points.map((p) => p.v));
+  const min = Math.min(...toutes), max = Math.max(...toutes);
   const pad = (max - min) * 0.15 || 1;
   const lo = min - pad, hi = max + pad;
 
-  const xAt = (i) => padL + (i / (points.length - 1)) * plotW;
+  // Echelle horizontale commune, basee sur le temps.
+  const tMin = Math.min(...series.flatMap((s) => s.points.map((p) => p.t.getTime())));
+  const tMax = Math.max(...series.flatMap((s) => s.points.map((p) => p.t.getTime())));
+  const spanT = tMax - tMin || 1;
+
+  const xAt = (t) => padL + ((t - tMin) / spanT) * plotW;
   const yAt = (v) => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
 
-  chartState.geom = { padL, padT, plotW, plotH, lo, hi };
+  chartState.geom = { padL, padT, plotW, plotH, lo, hi, tMin, tMax, spanT };
 
   // grille + labels Y
   ctx.font = "10px -apple-system, sans-serif";
@@ -423,44 +491,54 @@ function drawDetailChart() {
   const fmt = hours > 48
     ? (d) => d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
     : (d) => d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  [0, Math.floor((points.length - 1) / 2), points.length - 1].forEach((i) => {
-    ctx.fillText(fmt(points[i].t), xAt(i), padT + plotH + 6);
+  [0, 0.5, 1].forEach((f) => {
+    const t = tMin + spanT * f;
+    ctx.fillText(fmt(new Date(t)), padL + plotW * f, padT + plotH + 6);
   });
 
-  // aire
-  ctx.beginPath();
-  points.forEach((p, i) => (i === 0 ? ctx.moveTo(xAt(i), yAt(p.v)) : ctx.lineTo(xAt(i), yAt(p.v))));
-  ctx.lineTo(xAt(points.length - 1), padT + plotH);
-  ctx.lineTo(xAt(0), padT + plotH);
-  ctx.closePath();
-  const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-  grad.addColorStop(0, meta.color + "4d");
-  grad.addColorStop(1, meta.color + "00");
-  ctx.fillStyle = grad;
-  ctx.fill();
+  // courbes : remplissage uniquement sous la principale, pour rester lisible
+  series.forEach((s) => {
+    if (s.points.length < 2) return;
+    const trace = () => {
+      ctx.beginPath();
+      s.points.forEach((p, i) =>
+        i === 0 ? ctx.moveTo(xAt(p.t.getTime()), yAt(p.v)) : ctx.lineTo(xAt(p.t.getTime()), yAt(p.v)));
+    };
 
-  // ligne
-  ctx.beginPath();
-  points.forEach((p, i) => (i === 0 ? ctx.moveTo(xAt(i), yAt(p.v)) : ctx.lineTo(xAt(i), yAt(p.v))));
-  ctx.strokeStyle = meta.color;
-  ctx.lineWidth = 2.5;
-  ctx.lineJoin = "round";
-  ctx.stroke();
+    if (s.principale) {
+      trace();
+      ctx.lineTo(xAt(s.points[s.points.length - 1].t.getTime()), padT + plotH);
+      ctx.lineTo(xAt(s.points[0].t.getTime()), padT + plotH);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+      grad.addColorStop(0, s.color + "4d");
+      grad.addColorStop(1, s.color + "00");
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
 
-  // point final
-  const lastX = xAt(points.length - 1), lastY = yAt(points[points.length - 1].v);
-  ctx.beginPath();
-  ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
-  ctx.fillStyle = meta.color;
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(lastX, lastY, 7, 0, Math.PI * 2);
-  ctx.fillStyle = meta.color + "40";
-  ctx.fill();
+    trace();
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.principale ? 2.5 : 1.8;
+    ctx.globalAlpha = s.principale ? 1 : 0.75;
+    ctx.lineJoin = "round";
+    if (!s.principale) ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // point final
+    const last = s.points[s.points.length - 1];
+    ctx.beginPath();
+    ctx.arc(xAt(last.t.getTime()), yAt(last.v), s.principale ? 4 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = s.color;
+    ctx.fill();
+  });
 
   // curseur d'exploration
-  if (hoverIndex !== null && hoverIndex >= 0 && hoverIndex < points.length) {
-    const hx = xAt(hoverIndex), hy = yAt(points[hoverIndex].v);
+  if (hoverIndex !== null && hoverIndex >= 0 && hoverIndex < principale.points.length) {
+    const p = principale.points[hoverIndex];
+    const hx = xAt(p.t.getTime());
     ctx.save();
     ctx.setLineDash([3, 4]);
     ctx.strokeStyle = "rgba(255,255,255,0.45)";
@@ -471,27 +549,41 @@ function drawDetailChart() {
     ctx.stroke();
     ctx.restore();
 
-    ctx.beginPath();
-    ctx.arc(hx, hy, 9, 0, Math.PI * 2);
-    ctx.fillStyle = meta.color + "38";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(hx, hy, 3, 0, Math.PI * 2);
-    ctx.fillStyle = meta.color;
-    ctx.fill();
+    series.forEach((s) => {
+      const q = pointLePlusProche(s, p.t.getTime());
+      if (!q) return;
+      const hy = yAt(q.v);
+      ctx.beginPath();
+      ctx.arc(hx, hy, 9, 0, Math.PI * 2);
+      ctx.fillStyle = s.color + "38";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(hx, hy, 5.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(hx, hy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = s.color;
+      ctx.fill();
+    });
   }
+}
+
+// Les stations n'echantillonnent pas exactement aux memes instants.
+function pointLePlusProche(serie, ms) {
+  if (!serie.points.length) return null;
+  let best = serie.points[0], bestD = Math.abs(best.t.getTime() - ms);
+  for (const p of serie.points) {
+    const d = Math.abs(p.t.getTime() - ms);
+    if (d < bestD) { best = p; bestD = d; }
+  }
+  return best;
 }
 
 /* ---------- Bottom sheet ---------- */
 
 let currentMetric = null;
 let currentRange = 0; // 6 h par défaut
-let chartState = null;
-let hoverIndex = null;
 
 function buildRangeButtons() {
   const box = document.getElementById("ranges");
@@ -509,6 +601,18 @@ function buildRangeButtons() {
   });
 }
 
+function buildLegend(series) {
+  const box = document.getElementById("legend");
+  box.innerHTML = "";
+  if (series.length < 2) return;
+  series.forEach((s) => {
+    const item = document.createElement("div");
+    item.className = "item";
+    item.innerHTML = `<span class="swatch" style="background:${s.color}"></span>${s.label}`;
+    box.appendChild(item);
+  });
+}
+
 async function loadSheetData() {
   const meta = METRICS[currentMetric];
   const range = RANGES[currentRange];
@@ -518,32 +622,55 @@ async function loadSheetData() {
   msg.style.display = "none";
   hoverIndex = null;
   hideTooltip();
+
+  // Une serie par station pour les mesures locales, une seule pour la pression.
+  const cibles = meta.parStation
+    ? STATIONS.filter((s) => dernieres[s.id] && dernieres[s.id].ok)
+        .map((s) => ({ feed: s.feeds[currentMetric], color: s.color, label: s.label, principale: s.id === stationActive }))
+    : [{ feed: FEED_PRESSION, color: meta.color, label: "Pression", principale: true }];
+
+  if (!cibles.some((c) => c.principale) && cibles.length) cibles[0].principale = true;
+
   try {
-    const points = await fetchChart(currentMetric, range.hours, range.resolution);
-    if (points.length < 2) {
+    const series = await Promise.all(
+      cibles.map(async (c) => ({ ...c, points: await fetchChart(c.feed, range.hours, range.resolution) }))
+    );
+    const utiles = series.filter((s) => s.points.length >= 2);
+    const principale = utiles.find((s) => s.principale) || utiles[0];
+
+    if (!principale) {
       chartState = null;
       prepCanvas(canvas);
+      buildLegend([]);
       document.getElementById("chartHint").style.display = "none";
+      document.getElementById("statsFor").textContent = "";
       msg.textContent = "Pas encore assez de données sur cette période.";
       msg.style.display = "block";
       ["statMin", "statAvg", "statMax"].forEach((id) => (document.getElementById(id).textContent = "--"));
       return;
     }
+
+    utiles.forEach((s) => (s.principale = s === principale));
     document.getElementById("chartHint").style.display = "";
-    chartState = { points, meta, hours: range.hours };
+    buildLegend(utiles);
+    chartState = { series: utiles, meta, hours: range.hours };
     drawDetailChart();
 
-    const vals = points.map((p) => p.v);
+    const vals = principale.points.map((p) => p.v);
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
     const f = (v) => v.toFixed(meta.decimals) + " " + meta.unit;
     document.getElementById("statMin").textContent = f(Math.min(...vals));
     document.getElementById("statAvg").textContent = f(avg);
     document.getElementById("statMax").textContent = f(Math.max(...vals));
+    document.getElementById("statsFor").textContent =
+      utiles.length > 1 ? `Statistiques pour : ${principale.label}` : "";
   } catch (err) {
     console.error(err);
     chartState = null;
     prepCanvas(canvas);
+    buildLegend([]);
     document.getElementById("chartHint").style.display = "none";
+    document.getElementById("statsFor").textContent = "";
     msg.textContent = "Impossible de charger l'historique.";
     msg.style.display = "block";
   }
@@ -565,26 +692,38 @@ function scrub(clientX) {
   if (!chartState || !chartState.geom) return;
   const canvas = document.getElementById("detailChart");
   const rect = canvas.getBoundingClientRect();
-  const { padL, padT, plotW, plotH, lo, hi } = chartState.geom;
-  const { points, meta, hours } = chartState;
+  const { padL, padT, plotW, plotH, lo, hi, tMin, spanT } = chartState.geom;
+  const { series, meta, hours } = chartState;
+  const principale = series.find((s) => s.principale);
+  if (!principale) return;
 
   const x = clientX - rect.left;
-  let i = Math.round(((x - padL) / plotW) * (points.length - 1));
-  i = Math.max(0, Math.min(points.length - 1, i));
+  const frac = Math.max(0, Math.min(1, (x - padL) / plotW));
+  const cible = tMin + spanT * frac;
+
+  let i = 0, bestD = Infinity;
+  principale.points.forEach((p, k) => {
+    const d = Math.abs(p.t.getTime() - cible);
+    if (d < bestD) { bestD = d; i = k; }
+  });
   if (i === hoverIndex) return;
   hoverIndex = i;
   drawDetailChart();
 
-  const p = points[i];
-  const px = padL + (i / (points.length - 1)) * plotW;
+  const p = principale.points[i];
+  const px = padL + ((p.t.getTime() - tMin) / spanT) * plotW;
   const py = padT + plotH - ((p.v - lo) / (hi - lo)) * plotH;
 
+  const lignes = series.map((s) => {
+    const q = pointLePlusProche(s, p.t.getTime());
+    if (!q) return "";
+    const nom = series.length > 1 ? `${s.label} ` : "";
+    return `<div class="tv" style="color:${s.color}">${nom}${q.v.toFixed(meta.decimals)} ${meta.unit}</div>`;
+  }).join("");
+
   const tip = document.getElementById("tooltip");
-  tip.innerHTML =
-    `<div class="tv" style="color:${meta.color}">${p.v.toFixed(meta.decimals)} ${meta.unit}</div>` +
-    `<div class="tt">${fmtPointTime(p.t, hours)}</div>`;
+  tip.innerHTML = lignes + `<div class="tt">${fmtPointTime(p.t, hours)}</div>`;
   tip.classList.add("show");
-  // garde l'infobulle dans les limites du graphique
   const half = tip.offsetWidth / 2;
   tip.style.left = Math.max(half + 2, Math.min(rect.width - half - 2, px)) + "px";
   tip.style.top = Math.max(tip.offsetHeight + 4, py) + "px";
@@ -620,7 +759,8 @@ function scrub(clientX) {
 function openSheet(metric) {
   currentMetric = metric;
   const meta = METRICS[metric];
-  document.getElementById("sheetLabel").textContent = meta.label;
+  document.getElementById("sheetLabel").textContent =
+    meta.parStation ? `${meta.label} · ${stationLabel(stationActive)}` : meta.label;
 
   const liveEl = { temperature: "tempValue", humidite: "humValue", pression: "presValue" }[metric];
   document.getElementById("sheetValue").innerHTML = document.getElementById(liveEl).innerHTML;
@@ -629,7 +769,6 @@ function openSheet(metric) {
   document.getElementById("backdrop").classList.add("open");
   document.getElementById("sheet").classList.add("open");
   document.body.classList.add("sheet-open");
-  // laisse le sheet se positionner avant de mesurer le canvas
   setTimeout(loadSheetData, 80);
 }
 
@@ -649,6 +788,64 @@ document.querySelectorAll(".card").forEach((card) => {
 document.getElementById("backdrop").addEventListener("click", closeSheet);
 document.getElementById("closeBtn").addEventListener("click", closeSheet);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+
+/* ---------- Sélecteur de station ---------- */
+
+function stationLabel(id) {
+  const s = STATIONS.find((x) => x.id === id);
+  return s ? s.label : id;
+}
+
+function buildStationTabs() {
+  const box = document.getElementById("stations");
+  box.innerHTML = "";
+  STATIONS.forEach((s) => {
+    const btn = document.createElement("button");
+    const dispo = dernieres[s.id] && dernieres[s.id].ok;
+    btn.className = (s.id === stationActive ? "active " : "") + (dispo ? "" : "offline");
+    btn.innerHTML = `<span class="st-dot" style="background:${s.color}"></span>${s.icon} ${s.label}`;
+    btn.addEventListener("click", () => {
+      if (s.id === stationActive) return;
+      stationActive = s.id;
+      buildStationTabs();
+      afficherStation();
+      if (currentMetric && METRICS[currentMetric].parStation) {
+        document.getElementById("sheetLabel").textContent =
+          `${METRICS[currentMetric].label} · ${s.label}`;
+        loadSheetData();
+      }
+    });
+    box.appendChild(btn);
+  });
+}
+
+function afficherStation() {
+  const d = dernieres[stationActive];
+  const carteTemp = document.querySelector('[data-metric="temperature"]');
+  const carteHum = document.querySelector('[data-metric="humidite"]');
+
+  if (!d || !d.ok) {
+    document.getElementById("tempValue").innerHTML = `--<span class="unit">°C</span>`;
+    document.getElementById("humValue").innerHTML = `--<span class="unit">%</span>`;
+    setRing(document.getElementById("tempRing"), 0, "rgba(255,255,255,0.2)");
+    setRing(document.getElementById("humRing"), 0, "rgba(255,255,255,0.2)");
+    carteTemp.classList.add("attente");
+    carteHum.classList.add("attente");
+    return;
+  }
+
+  carteTemp.classList.remove("attente");
+  carteHum.classList.remove("attente");
+  document.getElementById("tempValue").innerHTML = `${d.temp.toFixed(1)}<span class="unit">°C</span>`;
+  document.getElementById("humValue").innerHTML = `${d.hum.toFixed(0)}<span class="unit">%</span>`;
+  setRing(document.getElementById("tempRing"), (d.temp - 0) / 40, colorFor(TEMP_STOPS, d.temp));
+  setRing(document.getElementById("humRing"), d.hum / 100, colorFor(HUM_STOPS, d.hum));
+
+  if (currentMetric && METRICS[currentMetric].parStation) {
+    const liveEl = { temperature: "tempValue", humidite: "humValue" }[currentMetric];
+    document.getElementById("sheetValue").innerHTML = document.getElementById(liveEl).innerHTML;
+  }
+}
 
 /* ---------- Prévision selon la tendance barométrique ---------- */
 
@@ -693,23 +890,32 @@ function setForecast(icon, title, sub, meta = "") {
 
 async function updateForecast() {
   try {
-    const [pts, tempPt] = await Promise.all([
-      fetchChart("pression", 3, 5),
-      fetchLast("temperature"),
-    ]);
+    const pts = await fetchChart(FEED_PRESSION, 3, 5);
 
     if (pts.length < 2) {
       setForecast("⏳", "Analyse en cours…", "En attente des premières mesures");
       return;
     }
 
+    // La reduction au niveau de la mer veut la temperature EXTERIEURE.
+    // A defaut on retombe sur l'interieur, avec un biais d'environ 2 hPa.
+    const ext = dernieres["ext"];
+    const int_ = dernieres["int"];
+    const tempRef = ext && ext.ok ? ext.temp : (int_ && int_.ok ? int_.temp : null);
+    const sourceExt = !!(ext && ext.ok);
+    if (tempRef === null) {
+      setForecast("⏳", "Analyse en cours…", "En attente des premières mesures");
+      return;
+    }
+
     const spanH = (pts[pts.length - 1].t - pts[0].t) / 3600000;
-    const qnh = pressionNiveauMer(pts[pts.length - 1].v, parseFloat(tempPt.value));
+    const qnh = pressionNiveauMer(pts[pts.length - 1].v, tempRef);
+    const suffixe = sourceExt ? "" : " · estimé sans capteur extérieur";
 
     if (spanH < 2) {
       const reste = Math.max(1, Math.ceil(2 - spanH));
       setForecast("⏳", "Analyse en cours…", `Encore ~${reste} h de mesures nécessaires`,
-        `${qnh.toFixed(0)} hPa au niveau de la mer`);
+        `${qnh.toFixed(0)} hPa au niveau de la mer${suffixe}`);
       return;
     }
 
@@ -720,7 +926,7 @@ async function updateForecast() {
     const signe = delta > 0 ? "+" : "";
 
     setForecast(f.icon, f.title, f.sub + rapide,
-      `${qnh.toFixed(0)} hPa niv. mer · ${signe}${delta.toFixed(1)} hPa en ${spanH.toFixed(1)} h`);
+      `${qnh.toFixed(0)} hPa niv. mer · ${signe}${delta.toFixed(1)} hPa en ${spanH.toFixed(1)} h${suffixe}`);
   } catch (err) {
     console.error(err);
     setForecast("⏳", "Prévision indisponible", "Impossible de lire la tendance");
@@ -729,26 +935,34 @@ async function updateForecast() {
 
 /* ---------- Boucle principale ---------- */
 
+function setRing(el, pct, color) {
+  const clamped = Math.max(0, Math.min(1, pct));
+  const c = 2 * Math.PI * 36;
+  el.setAttribute("stroke-dasharray", `${c * clamped} ${c}`);
+  if (color) el.setAttribute("stroke", color);
+}
+
 async function refresh() {
   try {
-    const [temp, hum, pres, presHistory] = await Promise.all([
-      fetchLast("temperature"),
-      fetchLast("humidite"),
-      fetchLast("pression"),
-      fetchChart("pression", 6, 5),
+    const [etats, pres, presHistory] = await Promise.all([
+      Promise.all(STATIONS.map(fetchStation)),
+      fetchLast(FEED_PRESSION),
+      fetchChart(FEED_PRESSION, 6, 5),
     ]);
 
-    const tempVal = parseFloat(temp.value);
-    const humVal = parseFloat(hum.value);
+    STATIONS.forEach((s, i) => { dernieres[s.id] = etats[i]; });
+
+    // Si la station affichée n'a jamais répondu mais qu'une autre marche, bascule dessus.
+    if (!dernieres[stationActive].ok) {
+      const dispo = STATIONS.find((s) => dernieres[s.id].ok);
+      if (dispo) stationActive = dispo.id;
+    }
+
+    buildStationTabs();
+    afficherStation();
+
     const presVal = parseFloat(pres.value);
-
-    document.getElementById("tempValue").innerHTML = `${tempVal.toFixed(1)}<span class="unit">°C</span>`;
-    document.getElementById("humValue").innerHTML = `${humVal.toFixed(0)}<span class="unit">%</span>`;
     document.getElementById("presValue").innerHTML = `${presVal.toFixed(0)}<span class="unit">hPa</span>`;
-
-    setRing(document.getElementById("tempRing"), (tempVal - TEMP_MIN) / (TEMP_MAX - TEMP_MIN),
-      colorFor(TEMP_STOPS, tempVal));
-    setRing(document.getElementById("humRing"), humVal / 100, colorFor(HUM_STOPS, humVal));
 
     if (presHistory.length >= 2) {
       const delta = presHistory[presHistory.length - 1].v - presHistory[0].v;
@@ -757,14 +971,15 @@ async function refresh() {
       drawSparkline(document.getElementById("chart"), presHistory, METRICS.pression.color);
     }
 
+    const nbOk = STATIONS.filter((s) => dernieres[s.id].ok).length;
     document.getElementById("statusDot").classList.remove("offline");
-    document.getElementById("statusText").textContent = "En ligne";
+    document.getElementById("statusText").textContent =
+      nbOk === STATIONS.length ? "En ligne" : `En ligne · ${nbOk}/${STATIONS.length} stations`;
     document.getElementById("lastUpdate").textContent =
       "Mis à jour à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
-    if (currentMetric) {
-      document.getElementById("sheetValue").innerHTML =
-        document.getElementById({ temperature: "tempValue", humidite: "humValue", pression: "presValue" }[currentMetric]).innerHTML;
+    if (currentMetric === "pression") {
+      document.getElementById("sheetValue").innerHTML = document.getElementById("presValue").innerHTML;
     }
   } catch (err) {
     document.getElementById("statusDot").classList.add("offline");
@@ -773,15 +988,9 @@ async function refresh() {
   }
 }
 
-function setRing(el, pct, color) {
-  const clamped = Math.max(0, Math.min(1, pct));
-  el.setAttribute("stroke-dasharray", `${RING_CIRCUMFERENCE * clamped} ${RING_CIRCUMFERENCE}`);
-  if (color) el.setAttribute("stroke", color);
-}
-
-refresh();
-updateForecast();
-setInterval(() => { refresh(); updateForecast(); }, REFRESH_MS);
+buildStationTabs();
+refresh().then(updateForecast);
+setInterval(() => { refresh().then(updateForecast); }, REFRESH_MS);
 
 window.addEventListener("resize", () => {
   if (currentMetric) loadSheetData();
