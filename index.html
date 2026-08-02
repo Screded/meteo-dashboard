@@ -24,16 +24,27 @@
     --accent-pressure: #9b8cff;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* Couleur pleine sur <html> : c'est elle qui remplit le fond de la fenetre.
+     Sans elle, le moindre pixel non couvert par <body> (arrondi de hauteur,
+     rebond de defilement, zone sous l'indicateur d'accueil en mode appli)
+     laisse apparaitre le blanc par defaut du navigateur. */
+  html {
+    height: 100%;
+    background-color: var(--bg-bottom);
+  }
   html, body {
-    margin: 0; padding: 0; height: 100%;
+    margin: 0; padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
     color: var(--text);
     overscroll-behavior: none;
   }
   body {
+    min-height: 100%;
     min-height: 100dvh;
-    padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+    background-color: var(--bg-bottom);
+    background-image: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+    background-repeat: no-repeat;
+    padding: max(16px, env(safe-area-inset-top)) 18px max(16px, env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -45,7 +56,7 @@
     background: rgba(255,255,255,0.07);
     border: 1px solid var(--card-border);
     border-radius: 20px;
-    padding: 14px 18px;
+    padding: 12px 18px;
     backdrop-filter: blur(10px);
   }
   .forecast .fc-icon { font-size: 2rem; line-height: 1; flex-shrink: 0; }
@@ -368,6 +379,7 @@
   <h3>Les deux stations</h3>
   <p>Chaque station mesure sa température et son humidité. La <strong>pression n'est pas dupliquée</strong> : c'est une grandeur commune, identique partout à altitude égale, donc une seule mesure suffit et elle reste affichée quelle que soit la station choisie.</p>
   <p>Le point de rosée n'est pas mesuré mais recalculé dans la page à partir de la température et de l'humidité.</p>
+  <p>Quand une lecture du capteur échoue, l'ESP publie une valeur nulle. La page écarte ces points — température hors de −50 à 80 °C, humidité nulle, pression hors de 800 à 1100 hPa — pour qu'ils ne faussent ni les extrêmes ni les moyennes.</p>
 
   <p class="fin">Capteurs AHT20 + BMP280 sur ESP32-C3 · relevés toutes les 60 s via Adafruit IO<br>Historique conservé 30 jours</p>
 </div>
@@ -417,6 +429,25 @@ let stationActive = STATIONS[0].id;
 const dernieres = {}; // { [stationId]: {ok, temp, hum} }
 const tendances = {}; // { [stationId]: { [mesure]: {delta, min, max} } }
 
+// Une lecture I2C ratee fait publier 0.0 / 0.0 par l'ESP : ces valeurs
+// entreraient dans les min/max, et un point de rosee sur 0 % d'humidite vaut
+// moins l'infini. On ecarte donc tout ce qui sort du physiquement possible.
+const PLAUSIBLE = {
+  temperature: [-50, 80],
+  humidite: [1, 100],   // 0 % exact est la signature d'une lecture ratee
+  pression: [800, 1100],
+};
+
+function mesureDuFeed(feed) {
+  return feed.replace(/^ext-/, "");
+}
+
+function estPlausible(feed, v) {
+  if (!isFinite(v)) return false;
+  const bornes = PLAUSIBLE[mesureDuFeed(feed)];
+  return !bornes || (v >= bornes[0] && v <= bornes[1]);
+}
+
 const METRICS = {
   temperature: { label: "Température",   unit: "°C", decimals: 1, parStation: true },
   humidite:    { label: "Humidité",      unit: "%",  decimals: 0, parStation: true },
@@ -428,6 +459,10 @@ const METRICS = {
 // sa vapeur. Contrairement a l'humidite relative, il ne depend pas de la
 // temperature ambiante — c'est lui qui dit si deux capteurs mesurent le meme air.
 function pointRosee(tempC, rh) {
+  // log(0) vaut moins l'infini : sans ce garde-fou, une humidite nulle
+  // (signature d'une lecture capteur ratee) propagerait un NaN dans tout
+  // l'affichage et dans le conseil d'aeration.
+  if (!isFinite(tempC) || !isFinite(rh) || rh <= 0) return NaN;
   const a = Math.log(rh / 100) + (17.625 * tempC) / (243.04 + tempC);
   return (243.04 * a) / (17.625 - a);
 }
@@ -493,12 +528,16 @@ const RANGES = [
 
 /* ---------- API ---------- */
 
+// On demande plusieurs points pour pouvoir remonter au dernier qui soit
+// plausible : une lecture ratee ne doit pas geler l'affichage sur un 0.0.
 async function fetchLast(feed) {
-  const res = await fetch(`https://io.adafruit.com/api/v2/${USERNAME}/feeds/${feed}/data?limit=1`);
+  const res = await fetch(`https://io.adafruit.com/api/v2/${USERNAME}/feeds/${feed}/data?limit=5`);
   if (!res.ok) throw new Error(`${feed}: ${res.status}`);
   const data = await res.json();
   if (!data.length) throw new Error(`${feed}: aucune donnée`);
-  return data[0];
+  const bon = data.find((p) => estPlausible(feed, parseFloat(p.value)));
+  if (!bon) throw new Error(`${feed}: aucune valeur plausible`);
+  return bon;
 }
 
 async function fetchChart(feed, hours, resolution) {
@@ -509,7 +548,7 @@ async function fetchChart(feed, hours, resolution) {
   const json = await res.json();
   return (json.data || [])
     .map(([date, value]) => ({ t: new Date(date), v: parseFloat(value) }))
-    .filter((p) => !isNaN(p.v));
+    .filter((p) => estPlausible(feed, p.v));
 }
 
 // Le point de rosee n'a pas de feed : il se recalcule a partir des deux
@@ -553,9 +592,12 @@ async function chargeTendances() {
   await Promise.all(STATIONS.map(async (s) => {
     if (!dernieres[s.id] || !dernieres[s.id].ok) { tendances[s.id] = null; return; }
     try {
+      // Tranches de 10 min et non 30 : une station qui vient d'etre branchee
+      // atteint deux points en 20 min au lieu d'une heure, et l'ecart horaire
+      // se calcule sur un point plus proche de l'heure pile.
       const [temps, hums] = await Promise.all([
-        fetchChart(s.feeds.temperature, 24, 30),
-        fetchChart(s.feeds.humidite, 24, 30),
+        fetchChart(s.feeds.temperature, 24, 10),
+        fetchChart(s.feeds.humidite, 24, 10),
       ]);
       const rosees = temps
         .map((p) => {
